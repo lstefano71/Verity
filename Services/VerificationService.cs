@@ -28,10 +28,10 @@ public class FileCompletedEventArgs(VerificationResult result, Dictionary<string
 
 public class VerificationService
 {
-  public event EventHandler<FileStartedEventArgs> FileStarted;
-  public event EventHandler<FileProgressEventArgs> FileProgress;
-  public event EventHandler<FileCompletedEventArgs> FileCompleted;
-  public event Action<string> FileFoundNotInChecksumList;
+  public event EventHandler<FileStartedEventArgs>? FileStarted;
+  public event EventHandler<FileProgressEventArgs>? FileProgress;
+  public event EventHandler<FileCompletedEventArgs>? FileCompleted;
+  public event Action<string>? FileFoundNotInChecksumList;
 
   public async Task<FinalSummary> VerifyChecksumsAsync(
       CliOptions options,

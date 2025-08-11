@@ -7,7 +7,6 @@ using Spectre.Console;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reflection;
-using System.Security.Cryptography;
 using System.Text;
 
 public class Program
@@ -21,7 +20,8 @@ public class Program
       CancellationToken cancellationToken = default) => {
         try {
           var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(checksumFile) : algorithm;
-          var options = new CliOptions(new FileInfo(checksumFile), !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null, usedAlgorithm);
+          var options = new CliOptions(new FileInfo(checksumFile),
+            !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null, usedAlgorithm);
           var exitCode = await RunVerification(options, threads ?? Environment.ProcessorCount, cancellationToken);
           return exitCode;
         } catch (OperationCanceledException) {
@@ -35,7 +35,9 @@ public class Program
       CancellationToken cancellationToken = default) => {
         try {
           var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(outputManifest) : algorithm;
-          var exitCode = await RunCreateManifest(new FileInfo(outputManifest), new DirectoryInfo(root), usedAlgorithm, threads ?? Environment.ProcessorCount, cancellationToken);
+          var exitCode = await RunCreateManifest(new FileInfo(outputManifest),
+            !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null,
+            usedAlgorithm, threads ?? Environment.ProcessorCount, cancellationToken);
           return exitCode;
         } catch (OperationCanceledException) {
           AnsiConsole.MarkupLine("[red]Interrupted by user[/]");
@@ -55,12 +57,12 @@ public class Program
         startTime,
         options.ChecksumFile.Name,
         options.Algorithm,
-        options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName
+        options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName!
     );
     AnsiConsole.Write(headerPanel);
 
     // Pre-scan spinner for manifest parsing
-    IReadOnlyList<ManifestEntry> manifestEntries = null;
+    IReadOnlyList<ManifestEntry> manifestEntries;
     int totalFiles = 0;
     long totalBytes = 0;
     await AnsiConsole.Status()
@@ -218,18 +220,21 @@ public class Program
     return 0;
   }
 
-  public static async Task<int> RunCreateManifest(FileInfo outputManifest, DirectoryInfo root, string algorithm, int threads, CancellationToken cancellationToken)
+  public static async Task<int> RunCreateManifest(FileInfo outputManifest,
+    DirectoryInfo? root, string algorithm, int threads, CancellationToken cancellationToken)
   {
     var version = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
     var startTime = DateTime.Now;
     var stopwatch = Stopwatch.StartNew();
+    var rootPath = root?.FullName ?? outputManifest.DirectoryName!;
+
     var headerPanel = PathUtils.BuildHeaderPanel(
         "Manifest Creation Info",
         version,
         startTime,
         outputManifest.Name,
         algorithm,
-        root.FullName
+        rootPath
     );
     AnsiConsole.Write(headerPanel);
 
@@ -239,7 +244,7 @@ public class Program
     }
 
     // Show spinner while calculating total size
-    string[] files = null;
+    string[] files = [];
     long totalBytes = 0;
     await AnsiConsole.Status()
         .Spinner(Spinner.Known.Dots)
@@ -250,7 +255,7 @@ public class Program
           await Task.Delay(100, cancellationToken); // Just to ensure spinner is visible for a moment
         });
 
-    if (files.Length == 0) {
+    if (files is { Length: > 0 }) {
       AnsiConsole.MarkupLine("[yellow]No files found in the specified root directory.[/]");
       return 1;
     }
@@ -314,25 +319,6 @@ public class Program
     summaryTable.AddRow("[cyan]Throughput[/]", throughput);
     AnsiConsole.Write(summaryTable);
     return exitCode;
-  }
-
-  public static async Task<string> ComputeFileHashAsync(string filePath, string algorithm, CancellationToken cancellationToken, IProgress<long>? progress = null)
-  {
-    var fileSize = new FileInfo(filePath).Length;
-    int bufferSize = FileIOUtils.GetOptimalBufferSize(fileSize);
-    // Normalize algorithm name to uppercase for compatibility
-    var normalizedAlgorithm = algorithm?.Trim().ToUpperInvariant();
-    using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous);
-    using var hasher = IncrementalHash.CreateHash(new HashAlgorithmName(normalizedAlgorithm));
-    byte[] buffer = new byte[bufferSize];
-    long totalRead = 0;
-    int bytesRead;
-    while ((bytesRead = await stream.ReadAsync(buffer.AsMemory(0, bufferSize), cancellationToken)) > 0) {
-      hasher.AppendData(buffer, 0, bytesRead);
-      totalRead += bytesRead;
-      progress?.Report(totalRead);
-    }
-    return Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
   }
 
   public static string InferAlgorithmFromExtension(string manifestPath)
