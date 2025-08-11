@@ -44,6 +44,21 @@ public class Program
           return -2;
         }
       });
+    app.Add("add", async Task<int> ([Argument] string manifestPath,
+      string? root = null, string algorithm = "SHA256",
+      int? threads = null,
+      CancellationToken cancellationToken = default) => {
+        try {
+          var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(manifestPath) : algorithm;
+          var exitCode = await RunAddToManifest(new FileInfo(manifestPath),
+            !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null,
+            usedAlgorithm, threads ?? Environment.ProcessorCount, cancellationToken);
+          return exitCode;
+        } catch (OperationCanceledException) {
+          AnsiConsole.MarkupLine("[red]Interrupted by user[/]");
+          return -2;
+        }
+      });
     await app.RunAsync(args);
   }
 
@@ -305,6 +320,115 @@ public class Program
       .AddColumn(new TableColumn("Value").LeftAligned());
 
     summaryTable.AddRow("[green]Files[/]", $"{files.Length:N0}");
+    summaryTable.AddRow("[cyan]Total Bytes[/]", $"{totalBytes.Bytes().Humanize()}");
+    summaryTable.AddRow("[cyan]Total Time[/]", stopwatch.Elapsed.Humanize(2));
+    var throughput = totalBytes.Bytes().Per(stopwatch.Elapsed).Humanize();
+    summaryTable.AddRow("[cyan]Throughput[/]", throughput);
+    AnsiConsole.Write(summaryTable);
+    return exitCode;
+  }
+
+  public static async Task<int> RunAddToManifest(FileInfo manifestFile,
+    DirectoryInfo? root, string algorithm, int threads, CancellationToken cancellationToken)
+  {
+    var version = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
+    var startTime = DateTime.Now;
+    var stopwatch = Stopwatch.StartNew();
+    var rootPath = root?.FullName ?? manifestFile.DirectoryName!;
+
+    var headerPanel = PathUtils.BuildHeaderPanel(
+        "Manifest Add Info",
+        version,
+        startTime,
+        manifestFile.Name,
+        algorithm,
+        rootPath
+    );
+    AnsiConsole.Write(headerPanel);
+
+    if (string.IsNullOrEmpty(rootPath)) {
+      AnsiConsole.MarkupLine("[red]Error: Root directory must be specified and exist.[/]");
+      return -1;
+    }
+
+    IReadOnlyList<ManifestEntry> manifestEntries = [];
+    await AnsiConsole.Status()
+        .Spinner(Spinner.Known.Dots)
+        .SpinnerStyle(Style.Parse("green"))
+        .StartAsync($"Reading manifest: {manifestFile.FullName}...", async ctx => {
+          var reader = new ManifestReader(manifestFile, root);
+          manifestEntries = await reader.ReadEntriesAsync(cancellationToken);
+          await Task.Delay(100, cancellationToken);
+        });
+
+    var listedFiles = new HashSet<string>(manifestEntries.Select(e => e.RelativePath), StringComparer.OrdinalIgnoreCase);
+    string[] allFiles = [];
+    await AnsiConsole.Status()
+        .Spinner(Spinner.Known.Dots)
+        .SpinnerStyle(Style.Parse("green"))
+        .StartAsync($"Scanning directory: {rootPath}...", async ctx => {
+          allFiles = Directory.GetFiles(rootPath, "*", SearchOption.AllDirectories);
+          await Task.Delay(100, cancellationToken);
+        });
+
+    var filesToAdd = allFiles
+      .Select(f => Path.GetRelativePath(rootPath, f))
+      .Where(rel => !listedFiles.Contains(rel))
+      .ToList();
+
+    if (filesToAdd.Count == 0) {
+      AnsiConsole.MarkupLine("[yellow]No new files to add to manifest.[/]");
+      return 0;
+    }
+
+    long totalBytes = filesToAdd.Select(f => new FileInfo(Path.Combine(rootPath, f)).Length).Sum();
+    long totalBytesRead = 0;
+    int filesProcessed = 0;
+    int exitCode = 0;
+
+    await AnsiConsole.Progress()
+        .AutoClear(true)
+        .HideCompleted(true)
+        .Columns([
+            new TaskDescriptionColumn(),
+            new ProgressBarColumn(),
+            new PercentageColumn(),
+            new RemainingTimeColumn(),
+            new SpinnerColumn(),
+        ])
+        .StartAsync(async ctx => {
+          var mainTask = ctx.AddTask($"[green]Adding to manifest ({totalBytes.Bytes().Humanize()})[/]", maxValue: totalBytes);
+          var manifestService = new ManifestCreationService();
+          manifestService.FileStarted += (sender, e) => { };
+          manifestService.FileProgress += (sender, e) => {
+            if (e.Bag is ProgressTask fileTask) {
+              fileTask.Value = e.BytesRead;
+            }
+            Interlocked.Add(ref totalBytesRead, e.BytesJustRead);
+            mainTask.Value = totalBytesRead;
+          };
+          manifestService.FileCompleted += (sender, e) => {
+            filesProcessed++;
+            if (e.Bag is ProgressTask fileTask) {
+              fileTask.Value = fileTask.MaxValue;
+            }
+          };
+          exitCode = await manifestService.AddToManifestAsync(manifestFile,
+            new DirectoryInfo(rootPath), algorithm,
+            filesToAdd, threads, cancellationToken, ctx);
+          mainTask.StopTask();
+        });
+    stopwatch.Stop();
+    AnsiConsole.MarkupLine($"[green]Manifest updated:[/] {manifestFile.FullName}");
+    AnsiConsole.WriteLine();
+    AnsiConsole.MarkupLine("[bold underline]Add Complete[/]");
+    var summaryTable = new Table()
+      .NoBorder()
+      .HideHeaders()
+      .AddColumn(new TableColumn("Label").LeftAligned())
+      .AddColumn(new TableColumn("Value").LeftAligned());
+
+    summaryTable.AddRow("[green]Files Added[/]", $"{filesToAdd.Count:N0}");
     summaryTable.AddRow("[cyan]Total Bytes[/]", $"{totalBytes.Bytes().Humanize()}");
     summaryTable.AddRow("[cyan]Total Time[/]", stopwatch.Elapsed.Humanize(2));
     var throughput = totalBytes.Bytes().Per(stopwatch.Elapsed).Humanize();
