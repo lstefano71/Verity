@@ -1,11 +1,3 @@
-Models.cs
-code
-C#
-download
-content_copy
-expand_less
-
-using System.IO;
 
 public record struct CliOptions(
     FileInfo ChecksumFile,
@@ -14,12 +6,12 @@ public record struct CliOptions(
 );
 
 public record ChecksumEntry(
-    string ExpectedHash, 
+    string ExpectedHash,
     string RelativePath
 );
 
 public record VerificationJob(
-    ChecksumEntry Entry, 
+    ChecksumEntry Entry,
     long FileSize
 );
 
@@ -33,9 +25,9 @@ public record VerificationResult(
 
 public enum ResultStatus
 {
-    Success,
-    Warning,
-    Error
+  Success,
+  Warning,
+  Error
 }
 
 public record FinalSummary(

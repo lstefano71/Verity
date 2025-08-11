@@ -1,0 +1,34 @@
+# .NET build outputs
+bin/
+obj/
+
+# Visual Studio files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider files
+.idea/
+*.sln.iml
+
+# VS Code files
+.vscode/
+
+# NuGet packages
+*.nupkg
+# NuGet restore logs
+project.lock.json
+
+# Other
+*.log
+TestResults/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Ignore local secrets
+secrets.json
+/.vs/CopilotSnapshots
+/.vs/Verity
