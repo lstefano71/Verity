@@ -1,3 +1,5 @@
+﻿using Spectre.Console;
+
 public static class PathUtils
 {
   // Abbreviate a path to a fixed length (default 40 chars) for display
@@ -29,5 +31,26 @@ public static class PathUtils
     result = dirTrunc + Path.DirectorySeparatorChar + fileTrunc + extTrunc;
     if (result.Length <= maxLength) return result;
     return string.Concat(result.AsSpan(0, maxLength - 3), "...");
+  }
+
+  // Pads the abbreviated path with '▪' to the left if needed, then escapes for Spectre.Console
+  public static string AbbreviateAndPadPathForDisplay(string path, int padLen = 50)
+  {
+    var abbreviated = AbbreviatePathForDisplay(path, padLen);
+    int padCount = padLen - abbreviated.Length;
+    if (padCount > 0) abbreviated = new string('▪', padCount) + abbreviated;
+    return Spectre.Console.Markup.Escape(abbreviated);
+  }
+
+  // Helper to build a Spectre.Console Panel for header info
+  public static Panel BuildHeaderPanel(string title, string version, DateTime startTime, string manifestName, string algorithm, string root)
+  {
+    var content =
+      $"[bold]Version:[/] {version}\n[bold]Started:[/] {startTime:yyyy-MM-dd HH:mm:ss}\n" +
+      $"[bold]Manifest:[/] {manifestName}\n" +
+      $"[bold]Algorithm:[/] {algorithm}\n[bold]Root:[/] {root}\n";
+    return new Panel(content)
+      .Header($"[bold]{title}[/]", Justify.Center)
+      .Expand();
   }
 }

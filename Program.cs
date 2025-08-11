@@ -47,12 +47,14 @@ public class Program
   {
     var version = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
     var startTime = DateTime.Now;
-    var headerPanel = new Panel(
-      $"[bold]Version:[/] {version}\n[bold]Started:[/] {startTime:yyyy-MM-dd HH:mm:ss}\n" +
-      $"[bold]Manifest:[/] {options.ChecksumFile.Name}\n" +
-      $"[bold]Algorithm:[/] {options.Algorithm}\n[bold]Root:[/] {options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName}\n")
-        .Header("[bold]Verification Info[/]", Justify.Center)
-        .Expand();
+    var headerPanel = PathUtils.BuildHeaderPanel(
+        "Verification Info",
+        version,
+        startTime,
+        options.ChecksumFile.Name,
+        options.Algorithm,
+        options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName
+    );
     AnsiConsole.Write(headerPanel);
 
     // Pre-scan spinner for manifest parsing
@@ -62,9 +64,9 @@ public class Program
         .Spinner(Spinner.Known.Dots)
         .SpinnerStyle(Style.Parse("green"))
         .StartAsync($"Reading manifest: {options.ChecksumFile.FullName}...", async ctx => {
-            manifestLines = await File.ReadAllLinesAsync(options.ChecksumFile.FullName, cancellationToken);
-            totalFiles = manifestLines.Count(line => !string.IsNullOrWhiteSpace(line) && line.Contains('\t'));
-            await Task.Delay(100, cancellationToken); // Ensure spinner is visible
+          manifestLines = await File.ReadAllLinesAsync(options.ChecksumFile.FullName, cancellationToken);
+          totalFiles = manifestLines.Count(line => !string.IsNullOrWhiteSpace(line) && line.Contains('\t'));
+          await Task.Delay(100, cancellationToken); // Ensure spinner is visible
         });
 
     var problematicResults = new ConcurrentBag<VerificationResult>();
@@ -84,48 +86,42 @@ public class Program
             new SpinnerColumn(),
         ])
         .StartAsync(async ctx => {
-            var mainTask = ctx.AddTask("[green]Verifying files[/]", maxValue: totalFiles);
-            var fileTasks = new ConcurrentDictionary<string, ProgressTask>();
-            var verificationService = new VerificationService();
+          var mainTask = ctx.AddTask("[green]Verifying files[/]", maxValue: totalFiles);
+          var fileTasks = new ConcurrentDictionary<string, ProgressTask>();
+          var verificationService = new VerificationService();
 
-            verificationService.FileStarted += (sender, e) => {
-                int padLen = 50;
-                var abbreviated = PathUtils.AbbreviatePathForDisplay(e.Entry.RelativePath, padLen);
-                int padCount = padLen - abbreviated.Length;
-                if (padCount > 0) abbreviated = new string('▪', padCount) + abbreviated;
-                var safeRelPath = Markup.Escape(abbreviated);
-                var fileTask = ctx.AddTask(safeRelPath, maxValue: e.FileSize > 0 ? e.FileSize : 1);
-                e.Bag["progressTask"] = fileTask;
-                fileTasks[e.Entry.RelativePath] = fileTask;
-            };
+          verificationService.FileStarted += (sender, e) => {
+            int padLen = 50;
+            var safeRelPath = PathUtils.AbbreviateAndPadPathForDisplay(e.Entry.RelativePath, padLen);
+            var fileTask = ctx.AddTask(safeRelPath, maxValue: e.FileSize > 0 ? e.FileSize : 1);
+            e.Bag["progressTask"] = fileTask;
+            fileTasks[e.Entry.RelativePath] = fileTask;
+          };
 
-            verificationService.FileProgress += (sender, e) => {
-                if (e.Bag.TryGetValue("progressTask", out var taskObj) && taskObj is ProgressTask fileTask)
-                {
-                    fileTask.Value = e.BytesRead;
-                }
-            };
+          verificationService.FileProgress += (sender, e) => {
+            if (e.Bag.TryGetValue("progressTask", out var taskObj) && taskObj is ProgressTask fileTask) {
+              fileTask.Value = e.BytesRead;
+            }
+          };
 
-            verificationService.FileCompleted += (sender, e) => {
-                filesProcessed++;
-                mainTask.Value = filesProcessed;
-                if (e.Result.Status != ResultStatus.Success)
-                {
-                    problematicResults.Add(e.Result);
-                }
-                // Mark file task as complete
-                if (e.Bag.TryGetValue("progressTask", out var taskObj) && taskObj is ProgressTask fileTask)
-                {
-                    fileTask.Value = fileTask.MaxValue;
-                }
-            };
+          verificationService.FileCompleted += (sender, e) => {
+            filesProcessed++;
+            mainTask.Value = filesProcessed;
+            if (e.Result.Status != ResultStatus.Success) {
+              problematicResults.Add(e.Result);
+            }
+            // Mark file task as complete
+            if (e.Bag.TryGetValue("progressTask", out var taskObj) && taskObj is ProgressTask fileTask) {
+              fileTask.Value = fileTask.MaxValue;
+            }
+          };
 
-            verificationService.FileFoundNotInChecksumList += (path) => {
-                unlistedFiles.Add(path);
-            };
+          verificationService.FileFoundNotInChecksumList += (path) => {
+            unlistedFiles.Add(path);
+          };
 
-            summary = await verificationService.VerifyChecksumsAsync(options, cancellationToken);
-            mainTask.StopTask();
+          summary = await verificationService.VerifyChecksumsAsync(options, cancellationToken);
+          mainTask.StopTask();
         });
 
     stopwatch.Stop();
@@ -138,77 +134,71 @@ public class Program
     var throughput = summary.TotalBytesRead.Bytes().Per(stopwatch.Elapsed).Humanize();
     AnsiConsole.MarkupLine($"[cyan] Throughput:[/] {throughput}");
 
-    if (!problematicResults.IsEmpty || !unlistedFiles.IsEmpty)
-    {
-        AnsiConsole.WriteLine();
-        var table = new Table().Expand();
-        table.Border = TableBorder.Rounded;
-        table.Title = new TableTitle("[bold yellow]Diagnostic Report[/]");
-        table.AddColumn("Status");
-        table.AddColumn("File");
-        table.AddColumn("Details");
-        table.AddColumn("Expected Hash");
-        table.AddColumn("Actual Hash");
+    if (!problematicResults.IsEmpty || !unlistedFiles.IsEmpty) {
+      AnsiConsole.WriteLine();
+      var table = new Table().Expand();
+      table.Border = TableBorder.Rounded;
+      table.Title = new TableTitle("[bold yellow]Diagnostic Report[/]");
+      table.AddColumn("Status");
+      table.AddColumn("File");
+      table.AddColumn("Details");
+      table.AddColumn("Expected Hash");
+      table.AddColumn("Actual Hash");
 
-        var allProblems = problematicResults.OrderBy(r => r.Status).ThenBy(r => r.Entry.RelativePath);
-        var orderedUnlistedFiles = unlistedFiles.OrderBy(f => f);
+      var allProblems = problematicResults.OrderBy(r => r.Status).ThenBy(r => r.Entry.RelativePath);
+      var orderedUnlistedFiles = unlistedFiles.OrderBy(f => f);
 
-        foreach (var result in allProblems)
-        {
-            var statusMarkup = result.Status switch
-            {
-                ResultStatus.Warning => "[yellow]Warning[/]",
-                ResultStatus.Error => "[red]Error[/]",
-                _ => "[grey]Info[/]"
-            };
-            table.AddRow(
-                statusMarkup,
-                result.FullPath ?? result.Entry.RelativePath,
-                result.Details ?? string.Empty,
-                result.Entry.ExpectedHash,
-                result.ActualHash ?? "N/A"
-            );
-        }
+      foreach (var result in allProblems) {
+        var statusMarkup = result.Status switch {
+          ResultStatus.Warning => "[yellow]Warning[/]",
+          ResultStatus.Error => "[red]Error[/]",
+          _ => "[grey]Info[/]"
+        };
+        table.AddRow(
+            statusMarkup,
+            result.FullPath ?? result.Entry.RelativePath,
+            result.Details ?? string.Empty,
+            result.Entry.ExpectedHash,
+            result.ActualHash ?? "N/A"
+        );
+      }
 
-        foreach (var file in orderedUnlistedFiles)
-        {
-            table.AddRow(
-                "Warning",
-                file,
-                "File exists but not in checksum list.",
-                "N/A",
-                "N/A"
-            );
-        }
+      foreach (var file in orderedUnlistedFiles) {
+        table.AddRow(
+            "Warning",
+            file,
+            "File exists but not in checksum list.",
+            "N/A",
+            "N/A"
+        );
+      }
 
-        AnsiConsole.Write(table);
+      AnsiConsole.Write(table);
 
-        var errorReport = new StringBuilder();
-        errorReport.AppendLine("#Status\tFile\tDetails\tExpectedHash\tActualHash");
+      var errorReport = new StringBuilder();
+      errorReport.AppendLine("#Status\tFile\tDetails\tExpectedHash\tActualHash");
 
-        foreach (var result in allProblems)
-        {
-            errorReport.AppendLine(string.Join("\t",
-                result.Status.ToString().ToUpperInvariant(),
-                result.FullPath ?? result.Entry.RelativePath,
-                result.Details ?? "",
-                result.Entry.ExpectedHash,
-                result.ActualHash ?? ""
-            ));
-        }
+      foreach (var result in allProblems) {
+        errorReport.AppendLine(string.Join("\t",
+            result.Status.ToString().ToUpperInvariant(),
+            result.FullPath ?? result.Entry.RelativePath,
+            result.Details ?? "",
+            result.Entry.ExpectedHash,
+            result.ActualHash ?? ""
+        ));
+      }
 
-        foreach (var file in orderedUnlistedFiles)
-        {
-            errorReport.AppendLine(string.Join("\t",
-                "WARNING",
-                file,
-                "File exists but not in checksum list.",
-                "",
-                ""
-            ));
-        }
+      foreach (var file in orderedUnlistedFiles) {
+        errorReport.AppendLine(string.Join("\t",
+            "WARNING",
+            file,
+            "File exists but not in checksum list.",
+            "",
+            ""
+        ));
+      }
 
-        await Console.Error.WriteAsync(errorReport.ToString());
+      await Console.Error.WriteAsync(errorReport.ToString());
     }
 
     if (summary.ErrorCount > 0) return -1;
@@ -221,12 +211,14 @@ public class Program
     var version = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
     var startTime = DateTime.Now;
     var stopwatch = Stopwatch.StartNew();
-    var headerPanel = new Panel(
-      $"[bold]Version:[/] {version}\n[bold]Started:[/] {startTime:yyyy-MM-dd HH:mm:ss}\n" +
-      $"[bold]Manifest:[/] {outputManifest.Name}\n" +
-      $"[bold]Algorithm:[/] {algorithm}\n[bold]Root:[/] {root.FullName}\n")
-        .Header("[bold]Manifest Creation Info[/]", Justify.Center)
-        .Expand();
+    var headerPanel = PathUtils.BuildHeaderPanel(
+        "Manifest Creation Info",
+        version,
+        startTime,
+        outputManifest.Name,
+        algorithm,
+        root.FullName
+    );
     AnsiConsole.Write(headerPanel);
 
     if (root == null || !root.Exists) {
@@ -278,10 +270,7 @@ public class Program
                     var relPath = Path.GetRelativePath(root.FullName, file);
                     var fileSize = new FileInfo(file).Length;
                     int padLen = 50;
-                    var abbreviated = PathUtils.AbbreviatePathForDisplay(relPath, padLen);
-                    int padCount = padLen - abbreviated.Length;
-                    if (padCount > 0) abbreviated = new string('▪', padCount) + abbreviated;
-                    var safeRelPath = Markup.Escape(abbreviated);
+                    var safeRelPath = PathUtils.AbbreviateAndPadPathForDisplay(relPath, padLen);
                     var task = ctx.AddTask(safeRelPath, maxValue: fileSize);
 
                     var fileProgress = new Progress<long>(v => task.Value = v);
