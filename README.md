@@ -1,35 +1,61 @@
 # Verity
 
-**Verity** is a high-performance, parallelized file integrity verification tool for modern Windows systems. It is designed to be extremely fast, provide excellent real-time feedback, and be easily integrated into automated scripts.
+**Verity** is a high-performance, parallelized file integrity verification and manifest creation tool for modern Windows systems. It is designed to be extremely fast, provide excellent real-time feedback, and be easily integrated into automated scripts.
 
 It is delivered as a single, self-contained executable with no external .NET runtime dependencies, built for speed and ease of use.
 
 ## Key Features
 
-* **High Performance:** Utilizes a concurrent producer-consumer architecture to maximize throughput by keeping CPU cores and the I/O subsystem saturated.
-* **Intelligent I/O:** Automatically adjusts file read buffer sizes based on file size to optimize performance for both very large and very small files.
-* **Rich TUI:** A clean and modern Terminal User Interface powered by Spectre.Console provides live progress, throughput metrics, and a detailed final report.
-* **Automation-Friendly:** Provides distinct exit codes for success, warning, and error states. It also generates a machine-readable TSV (Tab-Separated Values) report on `stderr` for easy parsing by other tools.
-* **Robust Error Handling:** Differentiates between critical errors (e.g., hash mismatch) and warnings (e.g., mismatch on a newer file, unlisted files), giving the user a clear picture of their data's state.
+*   **High Performance:** Utilizes a concurrent producer-consumer architecture to maximize throughput by keeping CPU cores and the I/O subsystem saturated.
+*   **Manifest Creation:** Can generate checksum manifests for a directory structure.
+*   **Intelligent I/O:** Automatically adjusts file read buffer sizes based on file size to optimize performance for both very large and very small files.
+*   **Rich TUI:** A clean and modern Terminal User Interface powered by Spectre.Console provides live progress, throughput metrics, and a detailed final report.
+*   **Automation-Friendly:** Provides distinct exit codes for success, warning, and error states. It also generates a machine-readable TSV (Tab-Separated Values) report on `stderr` for easy parsing by other tools.
+*   **Robust Error Handling:** Differentiates between critical errors (e.g., hash mismatch) and warnings (e.g., mismatch on a newer file, unlisted files), giving the user a clear picture of their data's state.
 
 ---
 
 ## Usage
 
-Verity is a command-line tool. The basic syntax is:
+Verity is a command-line tool with two main commands: `verify` and `create`.
+
+### `verify`
+
+Verifies the integrity of files based on a checksum manifest.
 
 ```shell
-Verity.exe <checksumFile> [options]
+Verity.exe verify <checksumFile> [options]
 ```
 
-### Arguments
+#### Arguments
 
-* **`checksumFile` (Required):** The path to the manifest file containing the checksums. The format must be one entry per line: `hash<tab>relative_path`.
+*   **`checksumFile` (Required):** The path to the manifest file containing the checksums. The format must be one entry per line: `hash<tab>relative_path`.
 
-### Options
+#### Options
 
-* **`--root <directory>` (Optional):** The root directory for the files. If omitted, Verity uses the directory where the `checksumFile` is located.
-* **`--algorithm <name>` (Optional):** The hashing algorithm to use. This must be a name recognized by the .NET cryptography services. **Default: `SHA256`**.
+*   **`--root <directory>` (Optional):** The root directory for the files. If omitted, Verity uses the directory where the `checksumFile` is located.
+*   **`--algorithm <name>` (Optional):** The hashing algorithm to use. This must be a name recognized by the .NET cryptography services. If omitted, the algorithm is inferred from the manifest file extension (`.sha256`, `.md5`, `.sha1`). **Default: `SHA256`**.
+
+---
+
+### `create`
+
+Creates a checksum manifest from a directory.
+
+```shell
+Verity.exe create <outputManifest> [options]
+```
+
+#### Arguments
+
+*   **`outputManifest` (Required):** The path to the manifest file to be created.
+
+#### Options
+
+*   **`--root <directory>` (Optional):** The root directory to scan for files. If omitted, the current directory is used.
+*   **`--algorithm <name>` (Optional):** The hashing algorithm to use. If omitted, the algorithm is inferred from the manifest file extension (`.sha256`, `.md5`, `.sha1`). **Default: `SHA256`**.
+
+---
 
 ### Examples
 
@@ -37,21 +63,28 @@ Verity.exe <checksumFile> [options]
 Verify files listed in `C:\archive\manifest.sha256`. The files are expected to be in `C:\archive\`.
 
 ```shell
-Verity.exe C:\archive\manifest.sha256
+Verity.exe verify C:\archive\manifest.sha256
 ```
 
 **Using a Different Root Directory:**
 The manifest is in one location, but the data is in another.
 
 ```shell
-Verity.exe C:\temp\manifest.sha256 --root D:\data\backups
+Verity.exe verify C:\temp\manifest.sha256 --root D:\data\backups
+```
+
+**Creating a Manifest:**
+Create a SHA256 manifest for the `D:\data\backups` directory.
+
+```shell
+Verity.exe create D:\data\backups\manifest.sha256 --root D:\data\backups
 ```
 
 **Using a Different Algorithm:**
 Verify files using the MD5 algorithm.
 
 ```shell
-Verity.exe files.md5 --algorithm MD5
+Verity.exe verify files.md5 --algorithm MD5
 ```
 
 ---
@@ -104,6 +137,7 @@ Verity uses process exit codes to signal the outcome of the verification.
 | `0`  | Success  | All files were verified successfully. No warnings or errors.       |
 | `1`  | Warning  | Verification completed, but one or more warnings were generated.   |
 | `-1` | Error    | Verification completed, and one or more errors were generated.     |
+| `-2` | Canceled | The operation was canceled by the user.                            |
 
 You can check the exit code in scripts (e.g., `$LASTEXITCODE` in PowerShell, `%ERRORLEVEL%` in CMD).
 
@@ -111,8 +145,12 @@ You can check the exit code in scripts (e.g., `$LASTEXITCODE` in PowerShell, `%E
 
 ## Building from Source
 
-1. Install the .NET 9 SDK.
-2. Clone this repository.
-3. Run `dotnet publish -c Release` from the project's root directory.
+1.  Install the .NET 9 SDK.
+2.  Clone this repository.
+3.  Run the build script:
 
-The native, self-contained executable will be located in `bin\Release\net9.0\win-x64\publish\Verity.exe`.
+    ```powershell
+    ./build.ps1
+    ```
+
+The native, self-contained executable will be located in `artifacts\Verity-v<version>.zip`.
