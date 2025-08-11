@@ -8,11 +8,12 @@ public static class VerificationService
       CliOptions options,
       Action<long, long> onProgress,
       Action<VerificationResult> onResult,
-      Action<string> onFileFoundNotInChecksumList)
+      Action<string> onFileFoundNotInChecksumList,
+      CancellationToken cancellationToken)
   {
     var rootPath = options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName!;
     var checksumFileTimestamp = options.ChecksumFile.LastWriteTimeUtc;
-    var lines = await File.ReadAllLinesAsync(options.ChecksumFile.FullName);
+    var lines = await File.ReadAllLinesAsync(options.ChecksumFile.FullName, cancellationToken);
     var totalFiles = lines.Length;
 
     var jobChannel = Channel.CreateBounded<VerificationJob>(Environment.ProcessorCount * 2);
@@ -23,6 +24,7 @@ public static class VerificationService
 
     var producer = Task.Run(async () => {
       foreach (var line in lines) {
+        cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(line)) continue;
         var parts = line.Split('\t', 2);
         if (parts.Length != 2) continue;
@@ -38,16 +40,17 @@ public static class VerificationService
           // Will be handled by the consumer as a file not found error.
         }
 
-        await jobChannel.Writer.WriteAsync(new VerificationJob(entry, fileSize));
+        await jobChannel.Writer.WriteAsync(new VerificationJob(entry, fileSize), cancellationToken);
       }
       jobChannel.Writer.Complete();
-    });
+    }, cancellationToken);
 
     var consumers = Enumerable.Range(0, Environment.ProcessorCount)
         .Select(_ => Task.Run(async () => {
           using var hasher = IncrementalHash.CreateHash(new HashAlgorithmName(options.Algorithm));
 
-          await foreach (var job in jobChannel.Reader.ReadAllAsync()) {
+          await foreach (var job in jobChannel.Reader.ReadAllAsync(cancellationToken)) {
+            cancellationToken.ThrowIfCancellationRequested();
             var fullPath = Path.Combine(rootPath, job.Entry.RelativePath);
             VerificationResult result;
 
@@ -62,10 +65,9 @@ public static class VerificationService
 
                 string actualHash;
                 using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous)) {
-                  // Read the stream in chunks and append to the hasher
                   byte[] buffer = new byte[bufferSize];
                   int bytesRead;
-                  while ((bytesRead = await stream.ReadAsync(buffer)) > 0) {
+                  while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0) {
                     hasher.AppendData(buffer, 0, bytesRead);
                   }
                   actualHash = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
@@ -84,16 +86,17 @@ public static class VerificationService
                 result = new(job.Entry, ResultStatus.Warning, Details: $"Cannot read file: {ex.Message}", FullPath: fullPath);
               }
             }
-            await resultChannel.Writer.WriteAsync(result);
+            await resultChannel.Writer.WriteAsync(result, cancellationToken);
           }
-        })).ToArray();
+        }, cancellationToken)).ToArray();
 
     await Task.WhenAll(consumers);
     resultChannel.Writer.Complete();
 
     int success = 0, warnings = 0, errors = 0;
 
-    await foreach (var result in resultChannel.Reader.ReadAllAsync()) {
+    await foreach (var result in resultChannel.Reader.ReadAllAsync(cancellationToken)) {
+      cancellationToken.ThrowIfCancellationRequested();
       switch (result.Status) {
         case ResultStatus.Success: success++; break;
         case ResultStatus.Warning: warnings++; break;
@@ -106,6 +109,7 @@ public static class VerificationService
 
     var allFilesInRoot = Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories);
     foreach (var file in allFilesInRoot) {
+      cancellationToken.ThrowIfCancellationRequested();
       if (!allListedFiles.ContainsKey(file) && !file.Equals(options.ChecksumFile.FullName, StringComparison.OrdinalIgnoreCase)) {
         warnings++;
         onFileFoundNotInChecksumList(file);

@@ -1,6 +1,9 @@
-using Spectre.Console;
-using Spectre.Console.Cli;
+using ConsoleAppFramework;
+
 using Humanizer;
+
+using Spectre.Console;
+
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reflection;
@@ -9,19 +12,29 @@ using System.Text;
 
 public class Program
 {
-  public static int Main(string[] args)
+  public static async Task Main(string[] args)
   {
-    var app = new CommandApp();
-    app.Configure(config => {
-      config.SetApplicationName("Verity");
-      config.SetHelpProvider(new DetailedHelpProvider());
-      config.AddCommand<VerifyCommand>("verify");
-      config.AddCommand<CreateCommand>("create");
-    });
-    return app.Run(args);
+    var app = ConsoleApp.Create();
+    app.Add("verify", async Task<int> ([Argument] string checksumFile,
+      string? root = null, string algorithm = "SHA256",
+      CancellationToken cancellationToken = default) => {
+
+        var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(checksumFile) : algorithm;
+        var options = new CliOptions(new FileInfo(checksumFile), !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null, usedAlgorithm);
+        var exitCode = await RunVerification(options, cancellationToken);
+        return exitCode;
+      });
+    app.Add("create", async Task<int> ([Argument] string outputManifest,
+      string? root = null, string algorithm = "SHA256",
+      CancellationToken cancellationToken = default) => {
+        var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(outputManifest) : algorithm;
+        var exitCode = await RunCreateManifest(new FileInfo(outputManifest), new DirectoryInfo(root), usedAlgorithm, cancellationToken);
+        return exitCode;
+      });
+    await app.RunAsync(args);
   }
 
-  public static async Task<int> RunVerification(CliOptions options)
+  public static async Task<int> RunVerification(CliOptions options, CancellationToken cancellationToken)
   {
     var version = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
     AnsiConsole.MarkupLine($"[bold cyan]Verity v{version}[/] - Checksum Verifier");
@@ -58,7 +71,7 @@ public class Program
             unlistedFiles.Add(path);
           };
 
-          summary = await VerificationService.VerifyChecksumsAsync(options, onProgress, onResult, onFileFound);
+          summary = await VerificationService.VerifyChecksumsAsync(options, onProgress, onResult, onFileFound, cancellationToken);
           progressTask.StopTask();
         });
 
@@ -71,11 +84,8 @@ public class Program
     AnsiConsole.MarkupLine($"[red]    Errors:[/] {summary.ErrorCount:N0}");
     AnsiConsole.MarkupLine($"[cyan]Total Time:[/] {stopwatch.Elapsed.Humanize(2)}");
 
-    var megabytesPerSecond = summary.TotalBytesRead / 1024.0 / 1024.0 / stopwatch.Elapsed.TotalSeconds;
-    if (double.IsNormal(megabytesPerSecond)) {
-      var throughput = summary.TotalBytesRead.Bytes().Per(stopwatch.Elapsed).Humanize();
-      AnsiConsole.MarkupLine($"[cyan] Throughput:[/] {throughput}");
-    }
+    var throughput = summary.TotalBytesRead.Bytes().Per(stopwatch.Elapsed).Humanize();
+    AnsiConsole.MarkupLine($"[cyan] Throughput:[/] {throughput}");
 
     if (!problematicResults.IsEmpty || !unlistedFiles.IsEmpty) {
       AnsiConsole.WriteLine();
@@ -149,12 +159,11 @@ public class Program
     return 0;
   }
 
-  public static async Task<int> RunCreateManifest(FileInfo outputManifest, DirectoryInfo root, string algorithm)
+  public static async Task<int> RunCreateManifest(FileInfo outputManifest, DirectoryInfo root, string algorithm, CancellationToken cancellationToken)
   {
     var version = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
     var startTime = DateTime.Now;
     var stopwatch = Stopwatch.StartNew();
-    // Print static header once
     var headerPanel = new Panel(
       $"[bold]Version:[/] {version}\n[bold]Started:[/] {startTime:yyyy-MM-dd HH:mm:ss}\n" +
       $"[bold]Manifest:[/] {outputManifest.Name}\n" +
@@ -167,13 +176,23 @@ public class Program
       AnsiConsole.MarkupLine("[red]Error: Root directory must be specified and exist.[/]");
       return -1;
     }
-    var files = Directory.GetFiles(root.FullName, "*", SearchOption.AllDirectories);
+
+    // Show spinner while calculating total size
+    string[] files = null;
+    long totalBytes = 0;
+    await AnsiConsole.Status()
+        .Spinner(Spinner.Known.Dots)
+        .SpinnerStyle(Style.Parse("green"))
+        .StartAsync($"Calculating total size: {root.FullName}...", async ctx => {
+          files = Directory.GetFiles(root.FullName, "*", SearchOption.AllDirectories);
+          totalBytes = files.Select(f => new FileInfo(f).Length).Sum();
+          await Task.Delay(100, cancellationToken); // Just to ensure spinner is visible for a moment
+        });
+
     if (files.Length == 0) {
       AnsiConsole.MarkupLine("[yellow]No files found in the specified root directory.[/]");
       return 1;
     }
-    // Calculate total bytes for all files
-    long totalBytes = files.Select(f => new FileInfo(f).Length).Sum();
     using var manifestWriter = new StreamWriter(outputManifest.FullName, false, Encoding.UTF8);
 
     var currentlyHashing = new ConcurrentDictionary<string, byte>();
@@ -196,10 +215,11 @@ public class Program
                       .Select(partition => Task.Run(async () => {
                         using (partition) {
                           while (partition.MoveNext()) {
+                            cancellationToken.ThrowIfCancellationRequested();
                             var file = partition.Current;
                             var relPath = Path.GetRelativePath(root.FullName, file);
                             currentlyHashing[relPath] = 0;
-                            string hash = await ComputeFileHashAsync(file, algorithm);
+                            string hash = await ComputeFileHashAsync(file, algorithm, cancellationToken);
                             lock (manifestWriter) {
                               manifestWriter.WriteLine($"{hash}\t{relPath}");
                             }
@@ -212,8 +232,8 @@ public class Program
                             }
                           }
                         }
-                      })
-                  )
+                      }, cancellationToken)
+                  ).ToArray()
               );
         });
     stopwatch.Stop();
@@ -231,7 +251,7 @@ public class Program
     return 0;
   }
 
-  public static async Task<string> ComputeFileHashAsync(string filePath, string algorithm)
+  public static async Task<string> ComputeFileHashAsync(string filePath, string algorithm, CancellationToken cancellationToken)
   {
     using var stream = File.OpenRead(filePath);
     using HashAlgorithm hasher = algorithm switch {
@@ -240,7 +260,7 @@ public class Program
       "MD5" => MD5.Create(),
       _ => throw new InvalidOperationException($"Unknown hash algorithm: {algorithm}")
     };
-    var hashBytes = await hasher.ComputeHashAsync(stream);
+    var hashBytes = await hasher.ComputeHashAsync(stream, cancellationToken);
     return Convert.ToHexStringLower(hashBytes);
   }
 
@@ -251,50 +271,7 @@ public class Program
       ".sha256" => "SHA256",
       ".md5" => "MD5",
       ".sha1" => "SHA1",
-      _ => "SHA256"
+      _ => "SHA256" // Ensure a default value is always returned
     };
   }
-}
-
-public class VerifyCommand : AsyncCommand<VerifySettings>
-{
-  public override async Task<int> ExecuteAsync(CommandContext context, VerifySettings settings)
-  {
-    var usedAlgorithm = string.IsNullOrWhiteSpace(settings.Algorithm) ? Program.InferAlgorithmFromExtension(settings.ChecksumFile.FullName) : settings.Algorithm;
-    var options = new CliOptions(settings.ChecksumFile, settings.Root, usedAlgorithm);
-    return await Program.RunVerification(options);
-  }
-}
-
-public class CreateCommand : AsyncCommand<CreateSettings>
-{
-  public override async Task<int> ExecuteAsync(CommandContext context, CreateSettings settings)
-  {
-    var usedAlgorithm = string.IsNullOrWhiteSpace(settings.Algorithm) ? Program.InferAlgorithmFromExtension(settings.OutputManifest.FullName) : settings.Algorithm;
-    return await Program.RunCreateManifest(settings.OutputManifest, settings.Root, usedAlgorithm);
-  }
-}
-
-public class VerifySettings : CommandSettings
-{
-  [CommandArgument(0, "<checksumFile>")]
-  public FileInfo ChecksumFile { get; set; }
-
-  [CommandOption("--root")]
-  public DirectoryInfo? Root { get; set; }
-
-  [CommandOption("--algorithm")]
-  public string? Algorithm { get; set; }
-}
-
-public class CreateSettings : CommandSettings
-{
-  [CommandArgument(0, "<outputManifest>")]
-  public FileInfo OutputManifest { get; set; }
-
-  [CommandOption("--root")]
-  public DirectoryInfo Root { get; set; }
-
-  [CommandOption("--algorithm")]
-  public string? Algorithm { get; set; }
 }
