@@ -132,12 +132,19 @@ public class Program
     stopwatch.Stop();
     AnsiConsole.WriteLine();
     AnsiConsole.MarkupLine("[bold underline]Verification Complete[/]");
-    AnsiConsole.MarkupLine($"[green]  Success:[/] {summary.SuccessCount:N0}");
-    AnsiConsole.MarkupLine($"[yellow]Warnings:[/] {summary.WarningCount:N0}");
-    AnsiConsole.MarkupLine($"[red]    Errors:[/] {summary.ErrorCount:N0}");
-    AnsiConsole.MarkupLine($"[cyan]Total Time:[/] {stopwatch.Elapsed.Humanize(2)}");
+    var summaryTable = new Table()
+      .NoBorder()
+      .HideHeaders()
+      .AddColumn(new TableColumn("Label").LeftAligned())
+      .AddColumn(new TableColumn("Value").LeftAligned());
+
+    summaryTable.AddRow("[green]Success[/]", $"{summary.SuccessCount:N0}");
+    summaryTable.AddRow("[yellow]Warnings[/]", $"{summary.WarningCount:N0}");
+    summaryTable.AddRow("[red]Errors[/]", $"{summary.ErrorCount:N0}");
+    summaryTable.AddRow("[cyan]Total Time[/]", stopwatch.Elapsed.Humanize(2));
     var throughput = summary.TotalBytesRead.Bytes().Per(stopwatch.Elapsed).Humanize();
-    AnsiConsole.MarkupLine($"[cyan] Throughput:[/] {throughput}");
+    summaryTable.AddRow("[cyan]Throughput[/]", throughput);
+    AnsiConsole.Write(summaryTable);
 
     if (!problematicResults.IsEmpty || !unlistedFiles.IsEmpty) {
       AnsiConsole.WriteLine();
@@ -294,11 +301,18 @@ public class Program
     AnsiConsole.MarkupLine($"[green]Manifest created:[/] {outputManifest.FullName}");
     AnsiConsole.WriteLine();
     AnsiConsole.MarkupLine("[bold underline]Creation Complete[/]");
-    AnsiConsole.MarkupLine($"[green]  Files:[/] {files.Length:N0}");
-    AnsiConsole.MarkupLine($"[cyan]Total Bytes:[/] {totalBytes.Bytes().Humanize()}");
-    AnsiConsole.MarkupLine($"[cyan]Total Time:[/] {stopwatch.Elapsed.Humanize(2)}");
+    var summaryTable = new Table()
+      .NoBorder()
+      .HideHeaders()
+      .AddColumn(new TableColumn("Label").LeftAligned())
+      .AddColumn(new TableColumn("Value").LeftAligned());
+
+    summaryTable.AddRow("[green]Files[/]", $"{files.Length:N0}");
+    summaryTable.AddRow("[cyan]Total Bytes[/]", $"{totalBytes.Bytes().Humanize()}");
+    summaryTable.AddRow("[cyan]Total Time[/]", stopwatch.Elapsed.Humanize(2));
     var throughput = totalBytes.Bytes().Per(stopwatch.Elapsed).Humanize();
-    AnsiConsole.MarkupLine($"[cyan] Throughput:[/] {throughput}");
+    summaryTable.AddRow("[cyan]Throughput[/]", throughput);
+    AnsiConsole.Write(summaryTable);
     return exitCode;
   }
 
