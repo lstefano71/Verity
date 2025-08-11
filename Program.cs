@@ -18,18 +18,27 @@ public class Program
     app.Add("verify", async Task<int> ([Argument] string checksumFile,
       string? root = null, string algorithm = "SHA256",
       CancellationToken cancellationToken = default) => {
-
-        var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(checksumFile) : algorithm;
-        var options = new CliOptions(new FileInfo(checksumFile), !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null, usedAlgorithm);
-        var exitCode = await RunVerification(options, cancellationToken);
-        return exitCode;
+        try {
+          var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(checksumFile) : algorithm;
+          var options = new CliOptions(new FileInfo(checksumFile), !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null, usedAlgorithm);
+          var exitCode = await RunVerification(options, cancellationToken);
+          return exitCode;
+        } catch (OperationCanceledException) {
+          AnsiConsole.MarkupLine("[red]Interrupted by user[/]");
+          return -2;
+        }
       });
     app.Add("create", async Task<int> ([Argument] string outputManifest,
       string? root = null, string algorithm = "SHA256",
       CancellationToken cancellationToken = default) => {
-        var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(outputManifest) : algorithm;
-        var exitCode = await RunCreateManifest(new FileInfo(outputManifest), new DirectoryInfo(root), usedAlgorithm, cancellationToken);
-        return exitCode;
+        try {
+          var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(outputManifest) : algorithm;
+          var exitCode = await RunCreateManifest(new FileInfo(outputManifest), new DirectoryInfo(root), usedAlgorithm, cancellationToken);
+          return exitCode;
+        } catch (OperationCanceledException) {
+          AnsiConsole.MarkupLine("[red]Interrupted by user[/]");
+          return -2;
+        }
       });
     await app.RunAsync(args);
   }
@@ -195,46 +204,51 @@ public class Program
     }
     using var manifestWriter = new StreamWriter(outputManifest.FullName, false, Encoding.UTF8);
 
-    var currentlyHashing = new ConcurrentDictionary<string, byte>();
-    var progressLock = new object();
-    long processedBytes = 0;
     long totalBytesRead = 0;
+    var progressLock = new object();
 
     await AnsiConsole.Progress()
+        .AutoClear(true)
+        .HideCompleted(true)
         .Columns([
             new TaskDescriptionColumn(),
-                new ProgressBarColumn(),
-                new PercentageColumn(),
-                new RemainingTimeColumn(),
-                new SpinnerColumn(),
+            new ProgressBarColumn(),
+            new PercentageColumn(),
+            new RemainingTimeColumn(),
+            new SpinnerColumn(),
         ])
         .StartAsync(async ctx => {
-          var progressTask = ctx.AddTask("[green]Hashing files[/]", maxValue: totalBytes);
+          // Create a progress task for each file
+          var mainTask = ctx.AddTask("[green]Creating manifest[/]", maxValue: totalBytes);
           await Task.WhenAll(
-                  Partitioner.Create(files).GetPartitions(Environment.ProcessorCount)
-                      .Select(partition => Task.Run(async () => {
-                        using (partition) {
-                          while (partition.MoveNext()) {
-                            cancellationToken.ThrowIfCancellationRequested();
-                            var file = partition.Current;
-                            var relPath = Path.GetRelativePath(root.FullName, file);
-                            currentlyHashing[relPath] = 0;
-                            string hash = await ComputeFileHashAsync(file, algorithm, cancellationToken);
-                            lock (manifestWriter) {
-                              manifestWriter.WriteLine($"{hash}\t{relPath}");
-                            }
-                            currentlyHashing.TryRemove(relPath, out _);
-                            var fileSize = new FileInfo(file).Length;
-                            lock (progressLock) {
-                              processedBytes += fileSize;
-                              totalBytesRead += fileSize;
-                              progressTask.Value = processedBytes;
-                            }
-                          }
-                        }
-                      }, cancellationToken)
-                  ).ToArray()
-              );
+            Partitioner.Create(files).GetPartitions(Environment.ProcessorCount)
+              .Select(partition => Task.Run(async () => {
+                using (partition) {
+                  while (partition.MoveNext()) {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var file = partition.Current;
+                    var relPath = Path.GetRelativePath(root.FullName, file);
+                    var fileSize = new FileInfo(file).Length;
+                    // Escape file name for Spectre.Console markup
+                    var safeRelPath = Markup.Escape(relPath);
+                    var task = ctx.AddTask(safeRelPath, maxValue: fileSize);
+
+                    string hash = await ComputeFileHashAsync(file, algorithm, cancellationToken);
+                    lock (manifestWriter) {
+                      manifestWriter.WriteLine($"{hash}\t{relPath}");
+                    }
+                    // Mark task as complete and visually indicate completion
+                    task.Value = fileSize;
+                    task.Description = $"{safeRelPath} (done)";
+                    lock (progressLock) {
+                      totalBytesRead += fileSize;
+                      mainTask.Value = totalBytesRead;
+                    }
+                  }
+                }
+              }, cancellationToken)
+            ).ToArray()
+          );
         });
     stopwatch.Stop();
     AnsiConsole.MarkupLine($"[green]Manifest created:[/] {outputManifest.FullName}");

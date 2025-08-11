@@ -67,7 +67,7 @@ public static class VerificationService
                 using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous)) {
                   byte[] buffer = new byte[bufferSize];
                   int bytesRead;
-                  while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0) {
+                  while ((bytesRead = await stream.ReadAsync(buffer, cancellationToken)) > 0) {
                     hasher.AppendData(buffer, 0, bytesRead);
                   }
                   actualHash = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
