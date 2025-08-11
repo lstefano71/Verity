@@ -17,11 +17,12 @@ public class Program
     var app = ConsoleApp.Create();
     app.Add("verify", async Task<int> ([Argument] string checksumFile,
       string? root = null, string algorithm = "SHA256",
+      int? threads = null,
       CancellationToken cancellationToken = default) => {
         try {
           var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(checksumFile) : algorithm;
           var options = new CliOptions(new FileInfo(checksumFile), !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null, usedAlgorithm);
-          var exitCode = await RunVerification(options, cancellationToken);
+          var exitCode = await RunVerification(options, threads ?? Environment.ProcessorCount, cancellationToken);
           return exitCode;
         } catch (OperationCanceledException) {
           AnsiConsole.MarkupLine("[red]Interrupted by user[/]");
@@ -30,10 +31,11 @@ public class Program
       });
     app.Add("create", async Task<int> ([Argument] string outputManifest,
       string? root = null, string algorithm = "SHA256",
+      int? threads = null,
       CancellationToken cancellationToken = default) => {
         try {
           var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(outputManifest) : algorithm;
-          var exitCode = await RunCreateManifest(new FileInfo(outputManifest), new DirectoryInfo(root), usedAlgorithm, cancellationToken);
+          var exitCode = await RunCreateManifest(new FileInfo(outputManifest), new DirectoryInfo(root), usedAlgorithm, threads ?? Environment.ProcessorCount, cancellationToken);
           return exitCode;
         } catch (OperationCanceledException) {
           AnsiConsole.MarkupLine("[red]Interrupted by user[/]");
@@ -43,7 +45,7 @@ public class Program
     await app.RunAsync(args);
   }
 
-  public static async Task<int> RunVerification(CliOptions options, CancellationToken cancellationToken)
+  public static async Task<int> RunVerification(CliOptions options, int threads, CancellationToken cancellationToken)
   {
     var version = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
     var startTime = DateTime.Now;
@@ -120,7 +122,7 @@ public class Program
             unlistedFiles.Add(path);
           };
 
-          summary = await verificationService.VerifyChecksumsAsync(options, cancellationToken);
+          summary = await verificationService.VerifyChecksumsAsync(options, cancellationToken, threads);
           mainTask.StopTask();
         });
 
@@ -206,7 +208,7 @@ public class Program
     return 0;
   }
 
-  public static async Task<int> RunCreateManifest(FileInfo outputManifest, DirectoryInfo root, string algorithm, CancellationToken cancellationToken)
+  public static async Task<int> RunCreateManifest(FileInfo outputManifest, DirectoryInfo root, string algorithm, int parallelism, CancellationToken cancellationToken)
   {
     var version = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
     var startTime = DateTime.Now;
@@ -261,7 +263,7 @@ public class Program
           // Create a progress task for each file
           var mainTask = ctx.AddTask("[green]Creating manifest[/]", maxValue: totalBytes);
           await Task.WhenAll(
-            [.. Partitioner.Create(files).GetPartitions(Environment.ProcessorCount)
+            [.. Partitioner.Create(files).GetPartitions(parallelism)
               .Select(partition => Task.Run(async () => {
                 using (partition) {
                   while (partition.MoveNext()) {
@@ -305,8 +307,10 @@ public class Program
   {
     var fileSize = new FileInfo(filePath).Length;
     int bufferSize = FileIOUtils.GetOptimalBufferSize(fileSize);
+    // Normalize algorithm name to uppercase for compatibility
+    var normalizedAlgorithm = algorithm?.Trim().ToUpperInvariant();
     using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous);
-    using var hasher = IncrementalHash.CreateHash(new HashAlgorithmName(algorithm));
+    using var hasher = IncrementalHash.CreateHash(new HashAlgorithmName(normalizedAlgorithm));
     byte[] buffer = new byte[bufferSize];
     long totalRead = 0;
     int bytesRead;

@@ -55,14 +55,16 @@ public class VerificationService
 
   public async Task<FinalSummary> VerifyChecksumsAsync(
       CliOptions options,
-      CancellationToken cancellationToken)
+      CancellationToken cancellationToken,
+      int parallelism = -1)
   {
+    if (parallelism <= 0) parallelism = Environment.ProcessorCount;
     var rootPath = options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName!;
     var checksumFileTimestamp = options.ChecksumFile.LastWriteTimeUtc;
     var lines = await File.ReadAllLinesAsync(options.ChecksumFile.FullName, cancellationToken);
     var totalFiles = lines.Length;
 
-    var jobChannel = Channel.CreateBounded<VerificationJob>(Environment.ProcessorCount * 2);
+    var jobChannel = Channel.CreateBounded<VerificationJob>(parallelism * 2);
     var resultChannel = Channel.CreateUnbounded<VerificationResult>();
 
     var allListedFiles = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
@@ -91,7 +93,7 @@ public class VerificationService
       jobChannel.Writer.Complete();
     }, cancellationToken);
 
-    var consumers = Enumerable.Range(0, Environment.ProcessorCount)
+    var consumers = Enumerable.Range(0, parallelism)
         .Select(_ => Task.Run(async () => {
           using var hasher = IncrementalHash.CreateHash(new HashAlgorithmName(options.Algorithm));
 
