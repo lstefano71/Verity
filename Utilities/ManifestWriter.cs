@@ -16,8 +16,8 @@ public class ManifestWriter(FileInfo outputFile) : IDisposable
   public async Task WriteAllEntriesAsync(IEnumerable<(string hash, string relativePath)> entries)
   {
     lock (_writeLock) {
-      foreach (var entry in entries) {
-        _writer.WriteLine($"{entry.hash}\t{entry.relativePath}");
+      foreach (var (hash, relativePath) in entries) {
+        _writer.WriteLine($"{hash}\t{relativePath}");
       }
     }
     await Task.CompletedTask;

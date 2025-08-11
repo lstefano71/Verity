@@ -36,7 +36,7 @@ public class ManifestCreationService
   public event EventHandler<ManifestFileProgressEventArgs> FileProgress;
   public event EventHandler<ManifestFileCompletedEventArgs> FileCompleted;
 
-  private async Task<int> ProcessManifestFilesAsync(FileInfo manifestFile, DirectoryInfo root, string algorithm, IEnumerable<string> files, int threads, CancellationToken cancellationToken, ProgressContext? ctx, ManifestOperationMode mode)
+  private async Task<int> ProcessManifestFilesAsync(ManifestOperationMode mode, FileInfo manifestFile, DirectoryInfo root, string algorithm, IEnumerable<string> files, int threads, ProgressContext? ctx, CancellationToken cancellationToken)
   {
     if (files == null || !files.Any()) return mode == ManifestOperationMode.Create ? 1 : 0;
     var newEntries = new ConcurrentBag<(string hash, string relativePath)>();
@@ -92,9 +92,9 @@ public class ManifestCreationService
       // Avoid duplicates: only add new entries for files not already present
       var existingPaths = new HashSet<string>(existingEntries.Select(e => e.Item2), StringComparer.OrdinalIgnoreCase);
       var filteredNewEntries = newEntries.Where(e => !existingPaths.Contains(e.Item2)).OrderBy(e => e.Item2);
-      allEntries = existingEntries.Concat(filteredNewEntries).ToList();
+      allEntries = [.. existingEntries, .. filteredNewEntries];
     } else {
-      allEntries = newEntries.OrderBy(e => e.relativePath).ToList();
+      allEntries = [.. newEntries.OrderBy(e => e.relativePath)];
     }
     using var manifestWriter = new ManifestWriter(manifestFile);
     await manifestWriter.WriteAllEntriesAsync(allEntries);
@@ -104,11 +104,11 @@ public class ManifestCreationService
   public async Task<int> CreateManifestAsync(FileInfo outputManifest, DirectoryInfo root, string algorithm, int threads, CancellationToken cancellationToken, ProgressContext? ctx = null)
   {
     var files = Directory.GetFiles(root.FullName, "*", SearchOption.AllDirectories);
-    return await ProcessManifestFilesAsync(outputManifest, root, algorithm, files, threads, cancellationToken, ctx, ManifestOperationMode.Create);
+    return await ProcessManifestFilesAsync(ManifestOperationMode.Create, outputManifest, root, algorithm, files, threads, ctx, cancellationToken);
   }
 
   public async Task<int> AddToManifestAsync(FileInfo manifestFile, DirectoryInfo root, string algorithm, List<string> filesToAdd, int threads, CancellationToken cancellationToken, ProgressContext? ctx = null)
   {
-    return await ProcessManifestFilesAsync(manifestFile, root, algorithm, filesToAdd, threads, cancellationToken, ctx, ManifestOperationMode.Add);
+    return await ProcessManifestFilesAsync(ManifestOperationMode.Add, manifestFile, root, algorithm, filesToAdd, threads, ctx, cancellationToken);
   }
 }
