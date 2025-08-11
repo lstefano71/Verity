@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Verity": {
+      "commandName": "Project",
+      "commandLineArgs": "create d:\\trash\\test.sha256 --root D:\\trash\\sofia\\vittoria\\"
+    }
+  }
+}

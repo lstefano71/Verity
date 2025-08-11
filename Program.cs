@@ -94,19 +94,14 @@ public class Program
         ])
         .StartAsync(async ctx => {
           var mainTask = ctx.AddTask($"[green]Verifying files ({totalBytes.Bytes().Humanize()})[/]", maxValue: totalFiles);
-          var fileTasks = new ConcurrentDictionary<string, ProgressTask>();
           var verificationService = new VerificationService();
 
           verificationService.FileStarted += (sender, e) => {
-            int padLen = 50;
-            var safeRelPath = PathUtils.AbbreviateAndPadPathForDisplay(e.Entry.RelativePath, padLen);
-            var fileTask = ctx.AddTask(safeRelPath, maxValue: e.FileSize > 0 ? e.FileSize : 1);
-            e.Bag["progressTask"] = fileTask;
-            fileTasks[e.Entry.RelativePath] = fileTask;
+            //            fileTasks[e.Entry.RelativePath] = e.Bag as ProgressTask;
           };
 
           verificationService.FileProgress += (sender, e) => {
-            if (e.Bag.TryGetValue("progressTask", out var taskObj) && taskObj is ProgressTask fileTask) {
+            if (e.Bag is ProgressTask fileTask) {
               fileTask.Value = e.BytesRead;
             }
           };
@@ -118,7 +113,7 @@ public class Program
               problematicResults.Add(e.Result);
             }
             // Mark file task as complete
-            if (e.Bag.TryGetValue("progressTask", out var taskObj) && taskObj is ProgressTask fileTask) {
+            if (e.Bag is ProgressTask fileTask) {
               fileTask.Value = fileTask.MaxValue;
             }
           };
@@ -127,7 +122,7 @@ public class Program
             unlistedFiles.Add(path);
           };
 
-          summary = await verificationService.VerifyChecksumsAsync(options, cancellationToken, threads);
+          summary = await verificationService.VerifyChecksumsAsync(options, cancellationToken, threads, ctx);
           mainTask.StopTask();
         });
 
@@ -238,7 +233,7 @@ public class Program
     );
     AnsiConsole.Write(headerPanel);
 
-    if (root == null || !root.Exists) {
+    if (string.IsNullOrEmpty(rootPath)) {
       AnsiConsole.MarkupLine("[red]Error: Root directory must be specified and exist.[/]");
       return -1;
     }
@@ -249,13 +244,13 @@ public class Program
     await AnsiConsole.Status()
         .Spinner(Spinner.Known.Dots)
         .SpinnerStyle(Style.Parse("green"))
-        .StartAsync($"Calculating total size: {root.FullName}...", async ctx => {
-          files = Directory.GetFiles(root.FullName, "*", SearchOption.AllDirectories);
+        .StartAsync($"Calculating total size: {rootPath}...", async ctx => {
+          files = Directory.GetFiles(rootPath, "*", SearchOption.AllDirectories);
           totalBytes = files.Select(f => new FileInfo(f).Length).Sum();
           await Task.Delay(100, cancellationToken); // Just to ensure spinner is visible for a moment
         });
 
-    if (files is { Length: > 0 }) {
+    if (files is null or []) {
       AnsiConsole.MarkupLine("[yellow]No files found in the specified root directory.[/]");
       return 1;
     }
@@ -278,28 +273,25 @@ public class Program
           var mainTask = ctx.AddTask($"[green]Creating manifest ({totalBytes.Bytes().Humanize()})[/]", maxValue: totalBytes);
           var manifestService = new ManifestCreationService();
           manifestService.FileStarted += (sender, e) => {
-            int padLen = 50;
-            var safeRelPath = PathUtils.AbbreviateAndPadPathForDisplay(e.RelativePath, padLen);
-            var fileTask = ctx.AddTask(safeRelPath, maxValue: e.FileSize > 0 ? e.FileSize : 1);
-            e.Bag["progressTask"] = fileTask;
+            // ProgressTask is created and passed as Bag
           };
           manifestService.FileProgress += (sender, e) => {
-            if (e.Bag.TryGetValue("progressTask", out var taskObj) && taskObj is ProgressTask fileTask) {
+            if (e.Bag is ProgressTask fileTask) {
               fileTask.Value = e.BytesRead;
             }
-            // Update main progress bar with total bytes read using BytesJustRead
             Interlocked.Add(ref totalBytesRead, e.BytesJustRead);
             mainTask.Value = totalBytesRead;
           };
           manifestService.FileCompleted += (sender, e) => {
             filesProcessed++;
-            if (e.Bag.TryGetValue("progressTask", out var taskObj) && taskObj is ProgressTask fileTask) {
+            if (e.Bag is ProgressTask fileTask) {
               fileTask.Value = fileTask.MaxValue;
             }
-            // Ensure main progress bar is fully updated at completion
             // No need to increment mainTask.Value here, as it's handled in FileProgress
           };
-          exitCode = await manifestService.CreateManifestAsync(outputManifest, root, algorithm, threads, cancellationToken);
+          exitCode = await manifestService.CreateManifestAsync(outputManifest,
+            new DirectoryInfo(rootPath), algorithm,
+            threads, cancellationToken, ctx);
           mainTask.StopTask();
         });
     stopwatch.Stop();

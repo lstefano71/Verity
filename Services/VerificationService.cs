@@ -1,29 +1,31 @@
+using Spectre.Console;
+
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Threading.Channels;
 
-public class FileStartedEventArgs(ChecksumEntry entry, string fullPath, long fileSize, Dictionary<string, object> bag) : EventArgs
+public class FileStartedEventArgs(ChecksumEntry entry, string fullPath, long fileSize, object? bag) : EventArgs
 {
   public ChecksumEntry Entry { get; } = entry;
   public string FullPath { get; } = fullPath;
   public long FileSize { get; } = fileSize;
-  public Dictionary<string, object> Bag { get; } = bag;
+  public object? Bag { get; } = bag;
 }
 
-public class FileProgressEventArgs(ChecksumEntry entry, string fullPath, long bytesRead, long fileSize, Dictionary<string, object> bag) : EventArgs
+public class FileProgressEventArgs(ChecksumEntry entry, string fullPath, long bytesRead, long fileSize, object? bag) : EventArgs
 {
   public ChecksumEntry Entry { get; } = entry;
   public string FullPath { get; } = fullPath;
   public long BytesRead { get; } = bytesRead;
   public long FileSize { get; } = fileSize;
-  public Dictionary<string, object> Bag { get; } = bag;
+  public object? Bag { get; } = bag;
 }
 
-public class FileCompletedEventArgs(VerificationResult result, Dictionary<string, object> bag) : EventArgs
+public class FileCompletedEventArgs(VerificationResult result, object? bag) : EventArgs
 {
   public VerificationResult Result { get; } = result;
-  public Dictionary<string, object> Bag { get; } = bag;
+  public object? Bag { get; } = bag;
 }
 
 public class VerificationService
@@ -36,7 +38,9 @@ public class VerificationService
   public async Task<FinalSummary> VerifyChecksumsAsync(
       CliOptions options,
       CancellationToken cancellationToken,
-      int parallelism = -1)
+      int parallelism = -1,
+      Spectre.Console.ProgressContext? ctx = null
+  )
   {
     if (parallelism <= 0) parallelism = Environment.ProcessorCount;
     var rootPath = options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName!;
@@ -81,8 +85,13 @@ public class VerificationService
             cancellationToken.ThrowIfCancellationRequested();
             var fullPath = Path.Combine(rootPath, job.Entry.RelativePath);
             VerificationResult result;
-            var bag = new Dictionary<string, object>();
-            FileStarted?.Invoke(this, new FileStartedEventArgs(job.Entry, fullPath, job.FileSize, bag));
+            Spectre.Console.ProgressTask? progressTask = null;
+            if (ctx is not null) {
+              int padLen = 50;
+              var safeRelPath = PathUtils.AbbreviateAndPadPathForDisplay(job.Entry.RelativePath, padLen);
+              progressTask = ctx.AddTask(safeRelPath, maxValue: job.FileSize > 0 ? job.FileSize : 1);
+            }
+            FileStarted?.Invoke(this, new FileStartedEventArgs(job.Entry, fullPath, job.FileSize, (object?)progressTask));
 
             if (job.FileSize < 0) {
               result = new(job.Entry, ResultStatus.Error, Details: "File not found.", FullPath: fullPath);
@@ -98,7 +107,7 @@ public class VerificationService
                     while ((bytesRead = await stream.ReadAsync(buffer, cancellationToken)) > 0) {
                       hasher.AppendData(buffer, 0, bytesRead);
                       bytesReadTotal += bytesRead;
-                      FileProgress?.Invoke(this, new FileProgressEventArgs(job.Entry, fullPath, bytesReadTotal, job.FileSize, bag));
+                      FileProgress?.Invoke(this, new FileProgressEventArgs(job.Entry, fullPath, bytesReadTotal, job.FileSize, (object?)progressTask));
                     }
                     actualHash = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
                   } finally {
@@ -119,7 +128,7 @@ public class VerificationService
                 result = new(job.Entry, ResultStatus.Warning, Details: $"Cannot read file: {ex.Message}", FullPath: fullPath);
               }
             }
-            FileCompleted?.Invoke(this, new FileCompletedEventArgs(result, bag));
+            FileCompleted?.Invoke(this, new FileCompletedEventArgs(result, (object?)progressTask));
             await resultChannel.Writer.WriteAsync(result, cancellationToken);
           }
         }, cancellationToken)).ToArray();

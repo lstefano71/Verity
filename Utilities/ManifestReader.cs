@@ -1,7 +1,7 @@
 public class ManifestEntry
 {
-  public string Hash { get; set; }
-  public string RelativePath { get; set; }
+  public string? Hash { get; set; }
+  public string? RelativePath { get; set; }
 }
 
 public class ManifestReader(FileInfo manifestFile, DirectoryInfo? rootDirectory)
@@ -9,7 +9,7 @@ public class ManifestReader(FileInfo manifestFile, DirectoryInfo? rootDirectory)
   public FileInfo ManifestFile { get; } = manifestFile;
   public DirectoryInfo? RootDirectory { get; } = rootDirectory;
 
-  public async Task<IReadOnlyList<ManifestEntry>> ReadEntriesAsync(CancellationToken cancellationToken)
+  public async Task<IReadOnlyList<ManifestEntry?>> ReadEntriesAsync(CancellationToken cancellationToken)
   {
     var lines = await File.ReadAllLinesAsync(ManifestFile.FullName, cancellationToken);
     var entries = lines
