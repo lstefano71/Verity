@@ -1,6 +1,6 @@
 using Spectre.Console;
 using Spectre.Console.Cli;
-
+using Humanizer;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reflection;
@@ -66,14 +66,15 @@ public class Program
 
     AnsiConsole.WriteLine();
     AnsiConsole.MarkupLine("[bold underline]Verification Complete[/]");
-    AnsiConsole.MarkupLine($"[green]  Success:[/] {summary.SuccessCount}");
-    AnsiConsole.MarkupLine($"[yellow]Warnings:[/] {summary.WarningCount}");
-    AnsiConsole.MarkupLine($"[red]    Errors:[/] {summary.ErrorCount}");
-    AnsiConsole.MarkupLine($"[cyan]Total Time:[/] {stopwatch.Elapsed.TotalSeconds:F2}s");
+    AnsiConsole.MarkupLine($"[green]  Success:[/] {summary.SuccessCount:N0}");
+    AnsiConsole.MarkupLine($"[yellow]Warnings:[/] {summary.WarningCount:N0}");
+    AnsiConsole.MarkupLine($"[red]    Errors:[/] {summary.ErrorCount:N0}");
+    AnsiConsole.MarkupLine($"[cyan]Total Time:[/] {stopwatch.Elapsed.Humanize(2)}");
 
     var megabytesPerSecond = summary.TotalBytesRead / 1024.0 / 1024.0 / stopwatch.Elapsed.TotalSeconds;
     if (double.IsNormal(megabytesPerSecond)) {
-      AnsiConsole.MarkupLine($"[cyan] Throughput:[/] {megabytesPerSecond:F2} MB/s");
+      var throughput = summary.TotalBytesRead.Bytes().Per(stopwatch.Elapsed).Humanize();
+      AnsiConsole.MarkupLine($"[cyan] Throughput:[/] {throughput}");
     }
 
     if (!problematicResults.IsEmpty || !unlistedFiles.IsEmpty) {
@@ -171,11 +172,13 @@ public class Program
       AnsiConsole.MarkupLine("[yellow]No files found in the specified root directory.[/]");
       return 1;
     }
+    // Calculate total bytes for all files
+    long totalBytes = files.Select(f => new FileInfo(f).Length).Sum();
     using var manifestWriter = new StreamWriter(outputManifest.FullName, false, Encoding.UTF8);
 
     var currentlyHashing = new ConcurrentDictionary<string, byte>();
     var progressLock = new object();
-    int processed = 0;
+    long processedBytes = 0;
     long totalBytesRead = 0;
 
     await AnsiConsole.Progress()
@@ -187,7 +190,7 @@ public class Program
                 new SpinnerColumn(),
         ])
         .StartAsync(async ctx => {
-          var progressTask = ctx.AddTask("[green]Hashing files[/]", maxValue: files.Length);
+          var progressTask = ctx.AddTask("[green]Hashing files[/]", maxValue: totalBytes);
           await Task.WhenAll(
                   Partitioner.Create(files).GetPartitions(Environment.ProcessorCount)
                       .Select(partition => Task.Run(async () => {
@@ -201,10 +204,11 @@ public class Program
                               manifestWriter.WriteLine($"{hash}\t{relPath}");
                             }
                             currentlyHashing.TryRemove(relPath, out _);
+                            var fileSize = new FileInfo(file).Length;
                             lock (progressLock) {
-                              processed++;
-                              totalBytesRead += new FileInfo(file).Length;
-                              progressTask.Value = processed;
+                              processedBytes += fileSize;
+                              totalBytesRead += fileSize;
+                              progressTask.Value = processedBytes;
                             }
                           }
                         }
@@ -216,12 +220,13 @@ public class Program
     AnsiConsole.MarkupLine($"[green]Manifest created:[/] {outputManifest.FullName}");
     AnsiConsole.WriteLine();
     AnsiConsole.MarkupLine("[bold underline]Creation Complete[/]");
-    AnsiConsole.MarkupLine($"[green]  Files:[/] {files.Length}");
-    AnsiConsole.MarkupLine($"[cyan]Total Bytes:[/] {totalBytesRead}");
-    AnsiConsole.MarkupLine($"[cyan]Total Time:[/] {stopwatch.Elapsed.TotalSeconds:F2}s");
+    AnsiConsole.MarkupLine($"[green]  Files:[/] {files.Length:N0}");
+    AnsiConsole.MarkupLine($"[cyan]Total Bytes:[/] {totalBytesRead.Bytes().Humanize()}");
+    AnsiConsole.MarkupLine($"[cyan]Total Time:[/] {stopwatch.Elapsed.Humanize(2)}");
     var mbps = totalBytesRead / 1024.0 / 1024.0 / stopwatch.Elapsed.TotalSeconds;
     if (double.IsNormal(mbps)) {
-      AnsiConsole.MarkupLine($"[cyan] Throughput:[/] {mbps:F2} MB/s");
+      var throughput = totalBytesRead.Bytes().Per(stopwatch.Elapsed).Humanize();
+      AnsiConsole.MarkupLine($"[cyan] Throughput:[/] {throughput}");
     }
     return 0;
   }
