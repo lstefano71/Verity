@@ -57,11 +57,18 @@ jobs:
       # Step 7: Generate the release notes from the commit messages
       - name: Generate Release Notes from Commits
         id: generate_changelog
-        # This command creates a bulleted list of commit messages from the push
-        run: echo "CHANGELOG=$(git log --pretty=format:'- %s' ${{ github.event.before }}...${{ github.event.after }})" >> $env:GITHUB_OUTPUT
         shell: pwsh
-
-      # Step 8: Create the GitHub Release and upload the artifact
+        run: |
+          if ("${{ github.event.before }}" -eq "0000000000000000000000000000000000000000") {
+            $rawChangelog = git log --pretty=format:'- %s'
+          } else {
+            $rawChangelog = git log --pretty=format:'- %s' ${{ github.event.before }}...${{ github.event.after }}
+          }
+          # Properly encode for GitHub Actions output (replace %, CR, LF)
+          $changelog = $rawChangelog -replace '%','%25' -replace "`r","%0D" -replace "`n","%0A"
+          Write-Output "CHANGELOG=$changelog" >> $env:GITHUB_OUTPUT
+          
+        # Step 8: Create the GitHub Release and upload the artifact
       - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
