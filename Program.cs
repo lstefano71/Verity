@@ -60,17 +60,20 @@ public class Program
     AnsiConsole.Write(headerPanel);
 
     // Pre-scan spinner for manifest parsing
-    string[] manifestLines = null;
+    IReadOnlyList<ManifestEntry> manifestEntries = null;
     int totalFiles = 0;
+    long totalBytes = 0;
     await AnsiConsole.Status()
         .Spinner(Spinner.Known.Dots)
         .SpinnerStyle(Style.Parse("green"))
         .StartAsync($"Reading manifest: {options.ChecksumFile.FullName}...", async ctx => {
-          manifestLines = await File.ReadAllLinesAsync(options.ChecksumFile.FullName, cancellationToken);
-          totalFiles = manifestLines.Count(line => !string.IsNullOrWhiteSpace(line) && line.Contains('\t'));
+          var reader = new ManifestReader(options.ChecksumFile, options.RootDirectory);
+          manifestEntries = await reader.ReadEntriesAsync(cancellationToken);
+          totalFiles = manifestEntries.Count;
+          totalBytes = await reader.GetTotalBytesAsync(cancellationToken);
           await Task.Delay(100, cancellationToken); // Ensure spinner is visible
         });
-
+    // If you need lines for diagnostics, you can get them from manifestEntries
     var problematicResults = new ConcurrentBag<VerificationResult>();
     var unlistedFiles = new ConcurrentBag<string>();
     var stopwatch = Stopwatch.StartNew();
@@ -88,7 +91,7 @@ public class Program
             new SpinnerColumn(),
         ])
         .StartAsync(async ctx => {
-          var mainTask = ctx.AddTask("[green]Verifying files[/]", maxValue: totalFiles);
+          var mainTask = ctx.AddTask($"[green]Verifying files ({totalBytes.Bytes().Humanize()})[/]", maxValue: totalFiles);
           var fileTasks = new ConcurrentDictionary<string, ProgressTask>();
           var verificationService = new VerificationService();
 
@@ -200,7 +203,7 @@ public class Program
         ));
       }
 
-      await Console.Error.WriteAsync(errorReport.ToString());
+      await global::System.Console.Error.WriteAsync(errorReport.ToString());
     }
 
     if (summary.ErrorCount > 0) return -1;
@@ -208,7 +211,7 @@ public class Program
     return 0;
   }
 
-  public static async Task<int> RunCreateManifest(FileInfo outputManifest, DirectoryInfo root, string algorithm, int parallelism, CancellationToken cancellationToken)
+  public static async Task<int> RunCreateManifest(FileInfo outputManifest, DirectoryInfo root, string algorithm, int threads, CancellationToken cancellationToken)
   {
     var version = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
     var startTime = DateTime.Now;
@@ -244,10 +247,10 @@ public class Program
       AnsiConsole.MarkupLine("[yellow]No files found in the specified root directory.[/]");
       return 1;
     }
-    using var manifestWriter = new StreamWriter(outputManifest.FullName, false, Encoding.UTF8);
 
     long totalBytesRead = 0;
-    var progressLock = new object();
+    int filesProcessed = 0;
+    int exitCode = 0;
 
     await AnsiConsole.Progress()
         .AutoClear(true)
@@ -260,47 +263,43 @@ public class Program
             new SpinnerColumn(),
         ])
         .StartAsync(async ctx => {
-          // Create a progress task for each file
-          var mainTask = ctx.AddTask("[green]Creating manifest[/]", maxValue: totalBytes);
-          await Task.WhenAll(
-            [.. Partitioner.Create(files).GetPartitions(parallelism)
-              .Select(partition => Task.Run(async () => {
-                using (partition) {
-                  while (partition.MoveNext()) {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var file = partition.Current;
-                    var relPath = Path.GetRelativePath(root.FullName, file);
-                    var fileSize = new FileInfo(file).Length;
-                    int padLen = 50;
-                    var safeRelPath = PathUtils.AbbreviateAndPadPathForDisplay(relPath, padLen);
-                    var task = ctx.AddTask(safeRelPath, maxValue: fileSize);
-
-                    var fileProgress = new Progress<long>(v => task.Value = v);
-                    string hash = await ComputeFileHashAsync(file, algorithm, cancellationToken, fileProgress);
-                    lock (manifestWriter) {
-                      manifestWriter.WriteLine($"{hash}\t{relPath}");
-                    }
-                    task.Value = fileSize;
-                    lock (progressLock) {
-                      totalBytesRead += fileSize;
-                      mainTask.Value = totalBytesRead;
-                    }
-                  }
-                }
-              }, cancellationToken)
-            )]
-          );
+          var mainTask = ctx.AddTask($"[green]Creating manifest ({totalBytes.Bytes().Humanize()})[/]", maxValue: totalBytes);
+          var manifestService = new ManifestCreationService();
+          manifestService.FileStarted += (sender, e) => {
+            int padLen = 50;
+            var safeRelPath = PathUtils.AbbreviateAndPadPathForDisplay(e.RelativePath, padLen);
+            var fileTask = ctx.AddTask(safeRelPath, maxValue: e.FileSize > 0 ? e.FileSize : 1);
+            e.Bag["progressTask"] = fileTask;
+          };
+          manifestService.FileProgress += (sender, e) => {
+            if (e.Bag.TryGetValue("progressTask", out var taskObj) && taskObj is ProgressTask fileTask) {
+              fileTask.Value = e.BytesRead;
+            }
+            // Update main progress bar with total bytes read using BytesJustRead
+            Interlocked.Add(ref totalBytesRead, e.BytesJustRead);
+            mainTask.Value = totalBytesRead;
+          };
+          manifestService.FileCompleted += (sender, e) => {
+            filesProcessed++;
+            if (e.Bag.TryGetValue("progressTask", out var taskObj) && taskObj is ProgressTask fileTask) {
+              fileTask.Value = fileTask.MaxValue;
+            }
+            // Ensure main progress bar is fully updated at completion
+            // No need to increment mainTask.Value here, as it's handled in FileProgress
+          };
+          exitCode = await manifestService.CreateManifestAsync(outputManifest, root, algorithm, threads, cancellationToken);
+          mainTask.StopTask();
         });
     stopwatch.Stop();
     AnsiConsole.MarkupLine($"[green]Manifest created:[/] {outputManifest.FullName}");
     AnsiConsole.WriteLine();
     AnsiConsole.MarkupLine("[bold underline]Creation Complete[/]");
     AnsiConsole.MarkupLine($"[green]  Files:[/] {files.Length:N0}");
-    AnsiConsole.MarkupLine($"[cyan]Total Bytes:[/] {totalBytesRead.Bytes().Humanize()}");
+    AnsiConsole.MarkupLine($"[cyan]Total Bytes:[/] {totalBytes.Bytes().Humanize()}");
     AnsiConsole.MarkupLine($"[cyan]Total Time:[/] {stopwatch.Elapsed.Humanize(2)}");
-    var throughput = totalBytesRead.Bytes().Per(stopwatch.Elapsed).Humanize();
+    var throughput = totalBytes.Bytes().Per(stopwatch.Elapsed).Humanize();
     AnsiConsole.MarkupLine($"[cyan] Throughput:[/] {throughput}");
-    return 0;
+    return exitCode;
   }
 
   public static async Task<string> ComputeFileHashAsync(string filePath, string algorithm, CancellationToken cancellationToken, IProgress<long>? progress = null)
