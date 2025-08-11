@@ -1,0 +1,73 @@
+name: Create Release
+
+# This workflow runs on any push to the main branch or any branch starting with "feature/"
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+
+jobs:
+  build-and-release:
+    # Use a Windows virtual machine to run the job
+    runs-on: windows-latest
+
+    steps:
+      # Step 1: Check out the repository's code
+      # fetch-depth: 0 is CRITICAL for Nerdbank.GitVersioning to get the full commit history.
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Step 2: Set up the .NET SDK
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x' # Use an SDK version compatible with your project
+
+      # Step 3: Install the NBGV command-line tool (as requested, not pre-installed)
+      - name: Install Nerdbank.GitVersioning tool
+        run: dotnet tool install -g nbgv
+
+      # Step 4: Run the Cake build script to compile and package the application
+      # The script will create the zip file in the ./artifacts directory
+      - name: Run Cake build and package
+        run: ./build.ps1 -Target Package
+        shell: pwsh
+
+      # Step 5: Get the version number for the release tag
+      - name: Get Release Version
+        id: get_version
+        run: echo "TAG_NAME=v$(nbgv get-version -v NuGetPackageVersion)" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      # Step 6: Find the path of the created zip file
+      # The name is dynamic, so we find it with a wildcard.
+      - name: Get Artifact Path
+        id: get_artifact
+        run: echo "ARTIFACT_PATH=$(Get-ChildItem ./artifacts/*.zip | Select-Object -First 1 -ExpandProperty FullName)" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+        
+      # Step 7: Generate the release notes from the commit messages
+      - name: Generate Release Notes from Commits
+        id: generate_changelog
+        # This command creates a bulleted list of commit messages from the push
+        run: echo "CHANGELOG=$(git log --pretty=format:'- %s' ${{ github.event.before }}...${{ github.event.after }})" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      # Step 8: Create the GitHub Release and upload the artifact
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          # The name of the tag to create, e.g., "v1.2.3"
+          tag_name: ${{ steps.get_version.outputs.TAG_NAME }}
+          # The title of the release, e.g., "Release v1.2.3"
+          name: Release ${{ steps.get_version.outputs.TAG_NAME }}
+          # The body/description of the release, taken from our commit messages
+          body: ${{ steps.generate_changelog.outputs.CHANGELOG }}
+          # The path to the zip file to upload as an attachment
+          files: ${{ steps.get_artifact.outputs.ARTIFACT_PATH }}
+          # Mark as a "pre-release" if the build is from a feature branch
+          prerelease: ${{ startsWith(github.ref, 'refs/heads/feature/') }}
