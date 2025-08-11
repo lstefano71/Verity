@@ -221,7 +221,7 @@ public class Program
           // Create a progress task for each file
           var mainTask = ctx.AddTask("[green]Creating manifest[/]", maxValue: totalBytes);
           await Task.WhenAll(
-            Partitioner.Create(files).GetPartitions(Environment.ProcessorCount)
+            [.. Partitioner.Create(files).GetPartitions(Environment.ProcessorCount)
               .Select(partition => Task.Run(async () => {
                 using (partition) {
                   while (partition.MoveNext()) {
@@ -229,17 +229,19 @@ public class Program
                     var file = partition.Current;
                     var relPath = Path.GetRelativePath(root.FullName, file);
                     var fileSize = new FileInfo(file).Length;
-                    // Escape file name for Spectre.Console markup
-                    var safeRelPath = Markup.Escape(relPath);
+                    int padLen = 50;
+                    var abbreviated = PathUtils.AbbreviatePathForDisplay(relPath, padLen);
+                    int padCount = padLen - abbreviated.Length;
+                    if (padCount > 0) abbreviated = new string('▪', padCount) + abbreviated;
+                    var safeRelPath = Markup.Escape(abbreviated);
                     var task = ctx.AddTask(safeRelPath, maxValue: fileSize);
 
-                    string hash = await ComputeFileHashAsync(file, algorithm, cancellationToken);
+                    var fileProgress = new Progress<long>(v => task.Value = v);
+                    string hash = await ComputeFileHashAsync(file, algorithm, cancellationToken, fileProgress);
                     lock (manifestWriter) {
                       manifestWriter.WriteLine($"{hash}\t{relPath}");
                     }
-                    // Mark task as complete and visually indicate completion
                     task.Value = fileSize;
-                    task.Description = $"{safeRelPath} (done)";
                     lock (progressLock) {
                       totalBytesRead += fileSize;
                       mainTask.Value = totalBytesRead;
@@ -247,7 +249,7 @@ public class Program
                   }
                 }
               }, cancellationToken)
-            ).ToArray()
+            )]
           );
         });
     stopwatch.Stop();
@@ -257,25 +259,27 @@ public class Program
     AnsiConsole.MarkupLine($"[green]  Files:[/] {files.Length:N0}");
     AnsiConsole.MarkupLine($"[cyan]Total Bytes:[/] {totalBytesRead.Bytes().Humanize()}");
     AnsiConsole.MarkupLine($"[cyan]Total Time:[/] {stopwatch.Elapsed.Humanize(2)}");
-    var mbps = totalBytesRead / 1024.0 / 1024.0 / stopwatch.Elapsed.TotalSeconds;
-    if (double.IsNormal(mbps)) {
-      var throughput = totalBytesRead.Bytes().Per(stopwatch.Elapsed).Humanize();
-      AnsiConsole.MarkupLine($"[cyan] Throughput:[/] {throughput}");
-    }
+    var throughput = totalBytesRead.Bytes().Per(stopwatch.Elapsed).Humanize();
+    AnsiConsole.MarkupLine($"[cyan] Throughput:[/] {throughput}");
     return 0;
   }
 
-  public static async Task<string> ComputeFileHashAsync(string filePath, string algorithm, CancellationToken cancellationToken)
+  public static async Task<string> ComputeFileHashAsync(string filePath, string algorithm, CancellationToken cancellationToken, IProgress<long>? progress = null)
   {
-    using var stream = File.OpenRead(filePath);
-    using HashAlgorithm hasher = algorithm switch {
-      "SHA256" => SHA256.Create(),
-      "SHA1" => SHA1.Create(),
-      "MD5" => MD5.Create(),
-      _ => throw new InvalidOperationException($"Unknown hash algorithm: {algorithm}")
-    };
-    var hashBytes = await hasher.ComputeHashAsync(stream, cancellationToken);
-    return Convert.ToHexStringLower(hashBytes);
+    var fileSize = new FileInfo(filePath).Length;
+    int bufferSize = FileIOUtils.GetOptimalBufferSize(fileSize);
+    using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous);
+    using var hasher = IncrementalHash.CreateHash(new HashAlgorithmName(algorithm));
+    byte[] buffer = new byte[bufferSize];
+    long totalRead = 0;
+    int bytesRead;
+    while ((bytesRead = await stream.ReadAsync(buffer.AsMemory(0, bufferSize), cancellationToken)) > 0)
+    {
+      hasher.AppendData(buffer, 0, bytesRead);
+      totalRead += bytesRead;
+      progress?.Report(totalRead);
+    }
+    return Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
   }
 
   public static string InferAlgorithmFromExtension(string manifestPath)

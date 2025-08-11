@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Threading.Channels;
+using System.Buffers;
 
 public static class VerificationService
 {
@@ -58,19 +59,20 @@ public static class VerificationService
               result = new(job.Entry, ResultStatus.Error, Details: "File not found.", FullPath: fullPath);
             } else {
               try {
-                const int smallFileThreshold = 64 * 1024;
-                const int defaultBufferSize = 4096;
-                const int largeFileBufferSize = 1 * 1024 * 1024;
-                int bufferSize = (job.FileSize > smallFileThreshold) ? largeFileBufferSize : defaultBufferSize;
-
+                int bufferSize = FileIOUtils.GetOptimalBufferSize(job.FileSize);
                 string actualHash;
                 using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous)) {
-                  byte[] buffer = new byte[bufferSize];
-                  int bytesRead;
-                  while ((bytesRead = await stream.ReadAsync(buffer, cancellationToken)) > 0) {
-                    hasher.AppendData(buffer, 0, bytesRead);
+                  byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
+                  try {
+                    int bytesRead;
+                    while ((bytesRead = await stream.ReadAsync(buffer, cancellationToken)) > 0) {
+                      hasher.AppendData(buffer, 0, bytesRead);
+                    }
+                    actualHash = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
                   }
-                  actualHash = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
+                  finally {
+                    ArrayPool<byte>.Shared.Return(buffer);
+                  }
                 }
 
                 Interlocked.Add(ref totalBytesRead, job.FileSize);
