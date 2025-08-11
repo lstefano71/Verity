@@ -1,6 +1,3 @@
-using System;
-using System.IO;
-
 public static class PathUtils
 {
   // Abbreviate a path to a fixed length (default 40 chars) for display
