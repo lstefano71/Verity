@@ -39,9 +39,7 @@ public class ManifestCreationService
   private async Task<int> ProcessManifestFilesAsync(FileInfo manifestFile, DirectoryInfo root, string algorithm, IEnumerable<string> files, int threads, CancellationToken cancellationToken, ProgressContext? ctx, ManifestOperationMode mode)
   {
     if (files == null || !files.Any()) return mode == ManifestOperationMode.Create ? 1 : 0;
-    using var manifestWriter = new ManifestWriter(manifestFile);
-    long totalBytesRead = 0;
-    var progressLock = new object();
+    var newEntries = new ConcurrentBag<(string hash, string relativePath)>();
     await Task.WhenAll(
         Partitioner.Create(files).GetPartitions(threads)
             .Select(partition => Task.Run(async () => {
@@ -76,11 +74,30 @@ public class ManifestCreationService
                       ArrayPool<byte>.Shared.Return(buffer);
                     }
                   }
-                  await manifestWriter.WriteEntryAsync(hash, relPath);
+                  newEntries.Add((hash, relPath));
                   FileCompleted?.Invoke(this, new ManifestFileCompletedEventArgs(file, relPath, hash, (object?)progressTask));
                 }
               }
             }, cancellationToken)));
+
+    List<(string hash, string relativePath)> allEntries;
+    if (mode == ManifestOperationMode.Add) {
+      // Read existing entries and merge
+      var reader = new ManifestReader(manifestFile, root);
+      var manifestEntries = await reader.ReadEntriesAsync(cancellationToken);
+      var existingEntries = manifestEntries
+        .Where(entry => entry != null && entry.Hash != null && entry.RelativePath != null)
+        .Select(entry => (entry.Hash!, entry.RelativePath!))
+        .ToList();
+      // Avoid duplicates: only add new entries for files not already present
+      var existingPaths = new HashSet<string>(existingEntries.Select(e => e.Item2), StringComparer.OrdinalIgnoreCase);
+      var filteredNewEntries = newEntries.Where(e => !existingPaths.Contains(e.Item2)).OrderBy(e => e.Item2);
+      allEntries = existingEntries.Concat(filteredNewEntries).ToList();
+    } else {
+      allEntries = newEntries.OrderBy(e => e.relativePath).ToList();
+    }
+    using var manifestWriter = new ManifestWriter(manifestFile);
+    await manifestWriter.WriteAllEntriesAsync(allEntries);
     return 0;
   }
 

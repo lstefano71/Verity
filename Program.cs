@@ -190,10 +190,10 @@ public class Program
       foreach (var file in orderedUnlistedFiles) {
         table.AddRow(
             "Warning",
-            file,
+            Markup.Escape(file),
             "File exists but not in checksum list.",
-            "N/A",
-            "N/A"
+            Markup.Escape("N/A"),
+            Markup.Escape("N/A")
         );
       }
 
