@@ -30,6 +30,9 @@ jobs:
       - name: Install Nerdbank.GitVersioning tool
         run: dotnet tool install -g nbgv
 
+      - name: restore dependencies
+        run: dotnet tool restore
+
       # Step 4: Run the Cake build script to compile and package the application
       # The script will create the zip file in the ./artifacts directory
       - name: Run Cake build and package
