@@ -11,10 +11,10 @@ var checksumFileArgument = new Argument<FileInfo>(
     description: "Path to the checksum file (e.g., hashes.sha256).")
     .ExistingOnly();
 
-var rootOption = new Option<DirectoryInfo?>(
-    name: "--root",
-    description: "The root directory for the files. If omitted, the checksum file's directory is used.")
-    .ExistingOnly();
+var rootOption = new Option<DirectoryInfo>(
+  name: "--root",
+  description: "The root directory for the files. If omitted, the checksum file's directory is used.")
+  .ExistingOnly();
 
 var algorithmOption = new Option<string>(
     name: "--algorithm",
@@ -28,9 +28,10 @@ var rootCommand = new RootCommand("Verity: A high-performance file checksum veri
     algorithmOption
 };
 
+
 rootCommand.SetHandler(async (file, root, algo) => {
   var options = new CliOptions(file, root, algo);
-  return await RunVerification(options);
+  await RunVerification(options);
 }, checksumFileArgument, rootOption, algorithmOption);
 
 return await rootCommand.InvokeAsync(args);
@@ -47,35 +48,34 @@ async static Task<int> RunVerification(CliOptions options)
   FinalSummary summary = new(0, 0, 0, 0, 0);
 
   await AnsiConsole.Progress()
-      .Columns(
-      [
-            new TaskDescriptionColumn(),
-            new ProgressBarColumn(),
-            new PercentageColumn(),
-            new RemainingTimeColumn(),
-            new SpinnerColumn(),
-      ])
-      .StartAsync(async ctx => {
-        var progressTask = ctx.AddTask("[green]Verifying files[/]");
+  .Columns([
+    new TaskDescriptionColumn(),
+    new ProgressBarColumn(),
+    new PercentageColumn(),
+    new RemainingTimeColumn(),
+    new SpinnerColumn(),
+  ])
+  .StartAsync(async ctx => {
+    var progressTask = ctx.AddTask("[green]Verifying files[/]");
 
-        Action<long, long> onProgress = (processed, total) => {
-          progressTask.MaxValue = total;
-          progressTask.Value = processed;
-        };
+    Action<long, long> onProgress = (processed, total) => {
+      progressTask.MaxValue = total;
+      progressTask.Value = processed;
+    };
 
-        Action<VerificationResult> onResult = (result) => {
-          if (result.Status != ResultStatus.Success) {
-            problematicResults.Add(result);
-          }
-        };
+    Action<VerificationResult> onResult = (result) => {
+      if (result.Status != ResultStatus.Success) {
+        problematicResults.Add(result);
+      }
+    };
 
-        Action<string> onFileFound = (path) => {
-          unlistedFiles.Add(path);
-        };
+    Action<string> onFileFound = (path) => {
+      unlistedFiles.Add(path);
+    };
 
-        summary = await VerificationService.VerifyChecksumsAsync(options, onProgress, onResult, onFileFound);
-        progressTask.StopTask();
-      });
+    summary = await VerificationService.VerifyChecksumsAsync(options, onProgress, onResult, onFileFound);
+    progressTask.StopTask();
+  });
 
   stopwatch.Stop();
 
@@ -93,7 +93,8 @@ async static Task<int> RunVerification(CliOptions options)
 
   if (!problematicResults.IsEmpty || !unlistedFiles.IsEmpty) {
     AnsiConsole.WriteLine();
-    var table = new Table().Expand().Border(TableBorder.Rounded);
+    var table = new Table().Expand();
+    table.Border = TableBorder.Rounded;
     table.Title = new TableTitle("[bold yellow]Diagnostic Report[/]");
     table.AddColumn("Status");
     table.AddColumn("File");
@@ -111,21 +112,21 @@ async static Task<int> RunVerification(CliOptions options)
         _ => "[grey]Info[/]"
       };
       table.AddRow(
-          statusMarkup,
-          new TextPath(result.FullPath ?? result.Entry.RelativePath).LeafColor(Color.White),
-          new Markup(result.Details ?? ""),
-          new Markup($"[grey]{result.Entry.ExpectedHash}[/]"),
-          new Markup($"[red]{result.ActualHash ?? "N/A"}[/]")
+        statusMarkup,
+        result.FullPath ?? result.Entry.RelativePath,
+        result.Details ?? string.Empty,
+        result.Entry.ExpectedHash,
+        result.ActualHash ?? "N/A"
       );
     }
 
     foreach (var file in orderedUnlistedFiles) {
       table.AddRow(
-          "[yellow]Warning[/]",
-          new TextPath(file).LeafColor(Color.White),
-          "File exists but not in checksum list.",
-          new Markup("[grey]N/A[/]"),
-          new Markup("[grey]N/A[/]")
+        "Warning",
+        file,
+        "File exists but not in checksum list.",
+        "N/A",
+        "N/A"
       );
     }
 

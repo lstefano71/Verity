@@ -62,7 +62,12 @@ public static class VerificationService
 
                 string actualHash;
                 using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous)) {
-                  hasher.AppendData(stream);
+                  // Read the stream in chunks and append to the hasher
+                  byte[] buffer = new byte[bufferSize];
+                  int bytesRead;
+                  while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0) {
+                    hasher.AppendData(buffer, 0, bytesRead);
+                  }
                   actualHash = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
                 }
 
