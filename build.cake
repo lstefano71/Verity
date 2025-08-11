@@ -1,3 +1,5 @@
+#load "./CakeHelpers.cake"
+
 ///////////////////////////////////////////////////////////////////////////////
 // ARGUMENTS
 ///////////////////////////////////////////////////////////////////////////////
@@ -20,14 +22,6 @@ Teardown(ctx =>
    // Executed AFTER the last task.
    Information("Finished running tasks.");
 });
-
-///////////////////////////////////////////////////////////////////////////////
-// TASKS
-///////////////////////////////////////////////////////////////////////////////
-
-Task("Default")
-.IsDependentOn("Build")
-.IsDependentOn("Run-Tests");
 
 Task("Build")
 .Does(() => {
@@ -78,12 +72,16 @@ Task("Run-Tests")
       // Use manifest extension to select algorithm
       var manifestPath = System.IO.Path.Combine(testRoot, $"manifest{algo.Ext}");
 
+
       // Execute Verity create
       var createResult = StartProcess(verityExe, $"create {manifestPath} --root {testRoot}");
       if (createResult != 0) {
          Error($"[FAIL] Manifest creation failed for {algo.Name} (exit code {createResult})");
       } else {
          Information($"Manifest created for {algo.Name}.");
+
+            // Strict manifest validation
+            ValidateManifestStrict(manifestPath, testRoot, algo.Name);
       }
 
       var verifyResult = StartProcess(verityExe, $"verify {manifestPath} --root {testRoot}");
