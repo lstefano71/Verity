@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Verity", "Verity.csproj", "{5716FC85-2346-A110-85AE-D0D9A8A57EFB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5716FC85-2346-A110-85AE-D0D9A8A57EFB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5716FC85-2346-A110-85AE-D0D9A8A57EFB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5716FC85-2346-A110-85AE-D0D9A8A57EFB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5716FC85-2346-A110-85AE-D0D9A8A57EFB}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {6DFC7F77-8540-4601-BB74-E31EDD5727CE}
+	EndGlobalSection
+EndGlobal
