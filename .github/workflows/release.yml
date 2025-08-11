@@ -66,8 +66,9 @@ jobs:
           }
           # Properly encode for GitHub Actions output (replace %, CR, LF)
           $changelog = $rawChangelog -replace '%','%25' -replace "`r","%0D" -replace "`n","%0A"
+          # Output to GITHUB_OUTPUT so multiline is preserved
           Write-Output "CHANGELOG=$changelog" >> $env:GITHUB_OUTPUT
-          
+                    
         # Step 8: Create the GitHub Release and upload the artifact
       - name: Create GitHub Release
         id: create_release
