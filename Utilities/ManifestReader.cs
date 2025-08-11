@@ -4,15 +4,10 @@ public class ManifestEntry
   public string RelativePath { get; set; }
 }
 
-public class ManifestReader
+public class ManifestReader(FileInfo manifestFile, DirectoryInfo? rootDirectory)
 {
-  public FileInfo ManifestFile { get; }
-  public DirectoryInfo? RootDirectory { get; }
-  public ManifestReader(FileInfo manifestFile, DirectoryInfo? rootDirectory)
-  {
-    ManifestFile = manifestFile;
-    RootDirectory = rootDirectory;
-  }
+  public FileInfo ManifestFile { get; } = manifestFile;
+  public DirectoryInfo? RootDirectory { get; } = rootDirectory;
 
   public async Task<IReadOnlyList<ManifestEntry>> ReadEntriesAsync(CancellationToken cancellationToken)
   {

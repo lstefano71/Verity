@@ -3,47 +3,27 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Threading.Channels;
 
-public class FileStartedEventArgs : EventArgs
+public class FileStartedEventArgs(ChecksumEntry entry, string fullPath, long fileSize, Dictionary<string, object> bag) : EventArgs
 {
-  public ChecksumEntry Entry { get; }
-  public string FullPath { get; }
-  public long FileSize { get; }
-  public Dictionary<string, object> Bag { get; }
-  public FileStartedEventArgs(ChecksumEntry entry, string fullPath, long fileSize, Dictionary<string, object> bag)
-  {
-    Entry = entry;
-    FullPath = fullPath;
-    FileSize = fileSize;
-    Bag = bag;
-  }
+  public ChecksumEntry Entry { get; } = entry;
+  public string FullPath { get; } = fullPath;
+  public long FileSize { get; } = fileSize;
+  public Dictionary<string, object> Bag { get; } = bag;
 }
 
-public class FileProgressEventArgs : EventArgs
+public class FileProgressEventArgs(ChecksumEntry entry, string fullPath, long bytesRead, long fileSize, Dictionary<string, object> bag) : EventArgs
 {
-  public ChecksumEntry Entry { get; }
-  public string FullPath { get; }
-  public long BytesRead { get; }
-  public long FileSize { get; }
-  public Dictionary<string, object> Bag { get; }
-  public FileProgressEventArgs(ChecksumEntry entry, string fullPath, long bytesRead, long fileSize, Dictionary<string, object> bag)
-  {
-    Entry = entry;
-    FullPath = fullPath;
-    BytesRead = bytesRead;
-    FileSize = fileSize;
-    Bag = bag;
-  }
+  public ChecksumEntry Entry { get; } = entry;
+  public string FullPath { get; } = fullPath;
+  public long BytesRead { get; } = bytesRead;
+  public long FileSize { get; } = fileSize;
+  public Dictionary<string, object> Bag { get; } = bag;
 }
 
-public class FileCompletedEventArgs : EventArgs
+public class FileCompletedEventArgs(VerificationResult result, Dictionary<string, object> bag) : EventArgs
 {
-  public VerificationResult Result { get; }
-  public Dictionary<string, object> Bag { get; }
-  public FileCompletedEventArgs(VerificationResult result, Dictionary<string, object> bag)
-  {
-    Result = result;
-    Bag = bag;
-  }
+  public VerificationResult Result { get; } = result;
+  public Dictionary<string, object> Bag { get; } = bag;
 }
 
 public class VerificationService

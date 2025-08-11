@@ -2,53 +2,30 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 
-public class ManifestFileStartedEventArgs : EventArgs
+public class ManifestFileStartedEventArgs(string filePath, string relativePath, long fileSize, Dictionary<string, object> bag) : EventArgs
 {
-  public string FilePath { get; }
-  public string RelativePath { get; }
-  public long FileSize { get; }
-  public Dictionary<string, object> Bag { get; }
-  public ManifestFileStartedEventArgs(string filePath, string relativePath, long fileSize, Dictionary<string, object> bag)
-  {
-    FilePath = filePath;
-    RelativePath = relativePath;
-    FileSize = fileSize;
-    Bag = bag;
-  }
+  public string FilePath { get; } = filePath;
+  public string RelativePath { get; } = relativePath;
+  public long FileSize { get; } = fileSize;
+  public Dictionary<string, object> Bag { get; } = bag;
 }
 
-public class ManifestFileProgressEventArgs : EventArgs
+public class ManifestFileProgressEventArgs(string filePath, string relativePath, long bytesRead, long bytesJustRead, long fileSize, Dictionary<string, object> bag) : EventArgs
 {
-  public string FilePath { get; }
-  public string RelativePath { get; }
-  public long BytesRead { get; }
-  public long BytesJustRead { get; }
-  public long FileSize { get; }
-  public Dictionary<string, object> Bag { get; }
-  public ManifestFileProgressEventArgs(string filePath, string relativePath, long bytesRead, long bytesJustRead, long fileSize, Dictionary<string, object> bag)
-  {
-    FilePath = filePath;
-    RelativePath = relativePath;
-    BytesRead = bytesRead;
-    BytesJustRead = bytesJustRead;
-    FileSize = fileSize;
-    Bag = bag;
-  }
+  public string FilePath { get; } = filePath;
+  public string RelativePath { get; } = relativePath;
+  public long BytesRead { get; } = bytesRead;
+  public long BytesJustRead { get; } = bytesJustRead;
+  public long FileSize { get; } = fileSize;
+  public Dictionary<string, object> Bag { get; } = bag;
 }
 
-public class ManifestFileCompletedEventArgs : EventArgs
+public class ManifestFileCompletedEventArgs(string filePath, string relativePath, string hash, Dictionary<string, object> bag) : EventArgs
 {
-  public string FilePath { get; }
-  public string RelativePath { get; }
-  public string Hash { get; }
-  public Dictionary<string, object> Bag { get; }
-  public ManifestFileCompletedEventArgs(string filePath, string relativePath, string hash, Dictionary<string, object> bag)
-  {
-    FilePath = filePath;
-    RelativePath = relativePath;
-    Hash = hash;
-    Bag = bag;
-  }
+  public string FilePath { get; } = filePath;
+  public string RelativePath { get; } = relativePath;
+  public string Hash { get; } = hash;
+  public Dictionary<string, object> Bag { get; } = bag;
 }
 
 public class ManifestCreationService
@@ -82,7 +59,7 @@ public class ManifestCreationService
                   long bytesReadTotal = 0;
                   try {
                     int bytesRead;
-                    while ((bytesRead = await stream.ReadAsync(buffer, 0, bufferSize, cancellationToken)) > 0) {
+                    while ((bytesRead = await stream.ReadAsync(buffer, cancellationToken)) > 0) {
                       hasher.AppendData(buffer, 0, bytesRead);
                       bytesReadTotal += bytesRead;
                       FileProgress?.Invoke(this, new ManifestFileProgressEventArgs(file, relPath, bytesReadTotal, bytesRead, fileSize, bag));

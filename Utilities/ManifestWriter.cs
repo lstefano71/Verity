@@ -1,18 +1,21 @@
-public class ManifestWriter : IDisposable
+
+public class ManifestWriter(FileInfo outputFile) : IDisposable
 {
-  private StreamWriter _writer;
-  public ManifestWriter(FileInfo outputFile)
-  {
-    _writer = new StreamWriter(outputFile.FullName, false, System.Text.Encoding.UTF8);
-  }
+  private readonly StreamWriter _writer = new(outputFile.FullName, false, System.Text.Encoding.UTF8, 4096);
+  private readonly Lock _writeLock = new();
 
   public async Task WriteEntryAsync(string hash, string relativePath)
   {
-    await _writer.WriteLineAsync($"{hash}\t{relativePath}");
+    lock (_writeLock) {
+      // Await inside lock is not ideal, but necessary for thread safety with StreamWriter
+      _writer.WriteLine($"{hash}\t{relativePath}");
+    }
+    await Task.CompletedTask;
   }
 
   public void Dispose()
   {
     _writer?.Dispose();
+    GC.SuppressFinalize(this);
   }
 }
