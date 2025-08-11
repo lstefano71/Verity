@@ -30,4 +30,16 @@ Task("Default")
    Information("Hello Cake!");
 });
 
+Task("AOT-Compile")
+.Does(() => {
+   DotNetPublish("./Verity.csproj", new DotNetPublishSettings {
+      Configuration = "Release",
+      ArgumentCustomization = args => args
+         .Append("/p:PublishAot=true")
+         .Append("/p:PublishTrimmed=true")
+         .Append("-r win-x64") // Change runtime identifier as needed
+   });
+   Information("AOT compilation completed in Release mode.");
+});
+
 RunTarget(target);
