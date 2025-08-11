@@ -33,8 +33,7 @@ jobs:
       # Step 4: Run the Cake build script to compile and package the application
       # The script will create the zip file in the ./artifacts directory
       - name: Run Cake build and package
-        run: ./build.ps1 -Target Package
-        shell: pwsh
+        run: dotnet cake --target=Package --configuration=Release
 
       # Step 5: Get the version number for the release tag
       - name: Get Release Version
