@@ -17,7 +17,7 @@ It is delivered as a single, self-contained executable with no external .NET run
 
 ## Usage
 
-Verity is a command-line tool with two main commands: `verify` and `create`.
+Verity is a command-line tool with three main commands: `verify`, `create`, and `add`.
 
 ### `verify`
 
@@ -35,6 +35,7 @@ Verity.exe verify <checksumFile> [options]
 
 *   **`--root <directory>` (Optional):** The root directory for the files. If omitted, Verity uses the directory where the `checksumFile` is located.
 *   **`--algorithm <name>` (Optional):** The hashing algorithm to use. This must be a name recognized by the .NET cryptography services. If omitted, the algorithm is inferred from the manifest file extension (`.sha256`, `.md5`, `.sha1`). **Default: `SHA256`**.
+*   **`--threads <number>` (Optional):** Number of threads to use for parallel processing. Defaults to the number of logical processors.
 
 ---
 
@@ -54,6 +55,24 @@ Verity.exe create <outputManifest> [options]
 
 *   **`--root <directory>` (Optional):** The root directory to scan for files. If omitted, the current directory is used.
 *   **`--algorithm <name>` (Optional):** The hashing algorithm to use. If omitted, the algorithm is inferred from the manifest file extension (`.sha256`, `.md5`, `.sha1`). **Default: `SHA256`**.
+*   **`--threads <number>` (Optional):** Number of threads to use for parallel processing. Defaults to the number of logical processors.
+### `add`
+
+Adds new files to an existing manifest.
+
+```shell
+Verity.exe add <manifestPath> [options]
+```
+
+#### Arguments
+
+*   **`manifestPath` (Required):** The path to the existing manifest file to update.
+
+#### Options
+
+*   **`--root <directory>` (Optional):** The root directory to scan for new files. If omitted, the current directory is used.
+*   **`--algorithm <name>` (Optional):** The hashing algorithm to use. If omitted, the algorithm is inferred from the manifest file extension (`.sha256`, `.md5`, `.sha1`). **Default: `SHA256`**.
+*   **`--threads <number>` (Optional):** Number of threads to use for parallel processing. Defaults to the number of logical processors.
 
 ---
 
@@ -85,6 +104,13 @@ Verify files using the MD5 algorithm.
 
 ```shell
 Verity.exe verify files.md5 --algorithm MD5
+```
+
+**Adding New Files to a Manifest:**
+Add new files from `D:\data\newfiles` to an existing manifest.
+
+```shell
+Verity.exe add D:\data\backups\manifest.sha256 --root D:\data\newfiles
 ```
 
 ---
