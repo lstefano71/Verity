@@ -91,7 +91,7 @@ public class ManifestCreationService
         .ToList();
       // Avoid duplicates: only add new entries for files not already present
       var existingPaths = new HashSet<string>(existingEntries.Select(e => e.Item2), StringComparer.OrdinalIgnoreCase);
-      var filteredNewEntries = newEntries.Where(e => !existingPaths.Contains(e.Item2)).OrderBy(e => e.Item2);
+      var filteredNewEntries = newEntries.Where(e => !existingPaths.Contains(e.relativePath)).OrderBy(e => e.relativePath);
       allEntries = [.. existingEntries, .. filteredNewEntries];
     } else {
       allEntries = [.. newEntries.OrderBy(e => e.relativePath)];
