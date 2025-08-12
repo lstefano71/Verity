@@ -80,7 +80,7 @@ jobs:
           
       - name: Generate Changelog
         id: changelog
-        uses: orhun/git-cliff-action@v3
+        uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
           # Use the tag from the build job to generate changelog from correct range
