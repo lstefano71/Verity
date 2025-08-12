@@ -43,12 +43,13 @@ public class Program
       CancellationToken cancellationToken = default) => {
         try {
           var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(outputManifest) : algorithm;
-          var exitCode = await RunCreateManifest(new FileInfo(outputManifest),
-            !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null,
-            usedAlgorithm, threads ?? Environment.ProcessorCount,
+          var options = new CliOptions(new FileInfo(outputManifest),
+            !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null, usedAlgorithm,
+            null,
+            false,
             GlobUtils.NormalizeGlobs(include, false),
-            GlobUtils.NormalizeGlobs(exclude, true),
-            cancellationToken);
+            GlobUtils.NormalizeGlobs(exclude, true));
+          var exitCode = await RunCreateManifest(options, threads ?? Environment.ProcessorCount, cancellationToken);
           return exitCode;
         } catch (OperationCanceledException) {
           AnsiConsole.MarkupLine("[red]Interrupted by user[/]");
@@ -64,12 +65,13 @@ public class Program
       CancellationToken cancellationToken = default) => {
         try {
           var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(manifestPath) : algorithm;
-          var exitCode = await RunAddToManifest(new FileInfo(manifestPath),
-            !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null,
-            usedAlgorithm, threads ?? Environment.ProcessorCount,
+          var options = new CliOptions(new FileInfo(manifestPath),
+            !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null, usedAlgorithm,
+            null,
+            false,
             GlobUtils.NormalizeGlobs(include, false),
-            GlobUtils.NormalizeGlobs(exclude, true),
-            cancellationToken);
+            GlobUtils.NormalizeGlobs(exclude, true));
+          var exitCode = await RunAddToManifest(options, threads ?? Environment.ProcessorCount, cancellationToken);
           return exitCode;
         } catch (OperationCanceledException) {
           AnsiConsole.MarkupLine("[red]Interrupted by user[/]");
@@ -164,26 +166,22 @@ public class Program
 
   public static async Task<int> RunManifestOperation(
     ManifestOperationMode mode,
-    FileInfo manifestFile,
-    DirectoryInfo? root,
-    string algorithm,
+    CliOptions options,
     int threads,
-    string[]? includeGlobs,
-    string[]? excludeGlobs,
     CancellationToken cancellationToken)
   {
     var startTime = DateTime.Now;
     var stopwatch = Stopwatch.StartNew();
-    var rootPath = root?.FullName ?? manifestFile.DirectoryName!;
+    var rootPath = options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName!;
 
     var headerPanel = Utilities.BuildHeaderPanel(
         mode == ManifestOperationMode.Create ? "Manifest Creation Info" : "Manifest Add Info",
         startTime,
-        manifestFile.Name,
-        algorithm,
+        options.ChecksumFile.Name,
+        options.Algorithm,
         rootPath,
-        includeGlobs,
-        excludeGlobs
+        options.IncludeGlobs,
+        options.ExcludeGlobs
     );
     AnsiConsole.Write(headerPanel);
 
@@ -201,7 +199,7 @@ public class Program
           .SpinnerStyle(Style.Parse("green"))
           .StartAsync($"Calculating total size: {rootPath}...", async ctx => {
             var allFiles = Directory.GetFiles(rootPath, "*", SearchOption.AllDirectories);
-            var relFiles = GlobUtils.FilterFiles(allFiles, rootPath, includeGlobs, excludeGlobs);
+            var relFiles = GlobUtils.FilterFiles(allFiles, rootPath, options.IncludeGlobs, options.ExcludeGlobs);
             files = [.. relFiles];
             totalBytes = files.Select(f => new FileInfo(Path.Combine(rootPath, f)).Length).Sum();
             await Task.Delay(100, cancellationToken);
@@ -215,8 +213,8 @@ public class Program
       await AnsiConsole.Status()
           .Spinner(Spinner.Known.Dots)
           .SpinnerStyle(Style.Parse("green"))
-          .StartAsync($"Reading manifest: {manifestFile.FullName}...", async ctx => {
-            var reader = new ManifestReader(manifestFile, root);
+          .StartAsync($"Reading manifest: {options.ChecksumFile.FullName}...", async ctx => {
+            var reader = new ManifestReader(options.ChecksumFile, options.RootDirectory);
             manifestEntries = await reader.ReadEntriesAsync(cancellationToken);
             await Task.Delay(100, cancellationToken);
           });
@@ -226,7 +224,7 @@ public class Program
           .SpinnerStyle(Style.Parse("green"))
           .StartAsync($"Scanning directory: {rootPath}...", async ctx => {
             var allFiles = Directory.GetFiles(rootPath, "*", SearchOption.AllDirectories);
-            var filteredFiles = GlobUtils.FilterFiles(allFiles, rootPath, includeGlobs, excludeGlobs);
+            var filteredFiles = GlobUtils.FilterFiles(allFiles, rootPath, options.IncludeGlobs, options.ExcludeGlobs);
             newFiles = [.. filteredFiles
               .Where(rel => !listedFiles.Contains(rel))];
             if (newFiles.Count == 0) {
@@ -268,17 +266,17 @@ public class Program
             }
           };
           if (mode == ManifestOperationMode.Create)
-            exitCode = await manifestService.CreateManifestAsync(manifestFile,
-              new DirectoryInfo(rootPath), algorithm,
+            exitCode = await manifestService.CreateManifestAsync(options.ChecksumFile,
+              new DirectoryInfo(rootPath), options.Algorithm,
               files, threads, cancellationToken, ctx);
           else
-            exitCode = await manifestService.AddToManifestAsync(manifestFile,
-              new DirectoryInfo(rootPath), algorithm,
+            exitCode = await manifestService.AddToManifestAsync(options.ChecksumFile,
+              new DirectoryInfo(rootPath), options.Algorithm,
               newFiles, threads, cancellationToken, ctx);
           mainTask.StopTask();
         });
     stopwatch.Stop();
-    AnsiConsole.MarkupLine($"[green]Manifest {(mode == ManifestOperationMode.Create ? "created" : "updated")}:[/] {manifestFile.FullName}");
+    AnsiConsole.MarkupLine($"[green]Manifest {(mode == ManifestOperationMode.Create ? "created" : "updated")}:[/] {options.ChecksumFile.FullName}");
     AnsiConsole.WriteLine();
     AnsiConsole.MarkupLine($"[bold underline]{(mode == ManifestOperationMode.Create ? "Creation" : "Add")} Complete[/]");
     var summaryTable = new Table()
@@ -299,16 +297,14 @@ public class Program
     return exitCode;
   }
 
-  public static async Task<int> RunCreateManifest(FileInfo outputManifest,
-    DirectoryInfo? root, string algorithm, int threads, string[]? includeGlobs, string[]? excludeGlobs, CancellationToken cancellationToken)
+  public static async Task<int> RunCreateManifest(CliOptions options, int threads, CancellationToken cancellationToken)
   {
-    return await RunManifestOperation(ManifestOperationMode.Create, outputManifest, root, algorithm, threads, includeGlobs, excludeGlobs, cancellationToken);
+    return await RunManifestOperation(ManifestOperationMode.Create, options, threads, cancellationToken);
   }
 
-  public static async Task<int> RunAddToManifest(FileInfo manifestFile,
-    DirectoryInfo? root, string algorithm, int threads, string[]? includeGlobs, string[]? excludeGlobs, CancellationToken cancellationToken)
+  public static async Task<int> RunAddToManifest(CliOptions options, int threads, CancellationToken cancellationToken)
   {
-    return await RunManifestOperation(ManifestOperationMode.Add, manifestFile, root, algorithm, threads, includeGlobs, excludeGlobs, cancellationToken);
+    return await RunManifestOperation(ManifestOperationMode.Add, options, threads, cancellationToken);
   }
 
   public static string InferAlgorithmFromExtension(string manifestPath)
