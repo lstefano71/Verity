@@ -5,81 +5,125 @@ using Humanizer;
 using Spectre.Console;
 
 using System.Diagnostics;
+using System.Reflection;
 
 public class Program
 {
+
+  // The application entry point is simplified to just run our class.
   public static async Task Main(string[] args)
   {
     var app = ConsoleApp.Create();
-    app.Add("verify", async Task<int> ([Argument] string checksumFile,
-      string? root = null, string algorithm = "SHA256",
+    app.Add<Program>();
+    await app.RunAsync(args);
+  }
+
+  /// <summary>
+  /// Verifies file integrity against a checksum manifest.
+  /// </summary>
+  /// <param name="checksumFile">Path to the manifest file.</param>
+  /// <param name="root">The root directory for resolving file paths.</param>
+  /// <param name="algorithm">Hashing algorithm to use (e.g., SHA256, MD5).</param>
+  /// <param name="threads">Number of parallel threads to use.</param>
+  /// <param name="tsvReport">Path to write a machine-readable TSV error report.</param>
+  /// <param name="showTable">Force the diagnostic table to be shown even if there are no issues.</param>
+  /// <param name="include">Semicolon-separated glob patterns for files to include.</param>
+  /// <param name="exclude">Semicolon-separated glob patterns for files to exclude.</param>
+  [Command("verify")]
+  public async Task<int> Verify(
+      [Argument] string checksumFile,
+      string? root = null,
+      string algorithm = "SHA256",
       int? threads = null,
       string? tsvReport = null,
       bool showTable = false,
       string? include = null,
       string? exclude = null,
-      CancellationToken cancellationToken = default) => {
-        try {
-          var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(checksumFile) : algorithm;
-          var options = new CliOptions(new FileInfo(checksumFile),
-            !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null, usedAlgorithm,
-            !string.IsNullOrWhiteSpace(tsvReport) ? new FileInfo(tsvReport) : null,
-            showTable,
-            GlobUtils.NormalizeGlobs(include, false),
-            GlobUtils.NormalizeGlobs(exclude, true));
-          var exitCode = await RunVerification(options, threads ?? Environment.ProcessorCount, cancellationToken);
-          return exitCode;
-        } catch (OperationCanceledException) {
-          AnsiConsole.MarkupLine("[red]Interrupted by user[/]");
-          return -2;
-        }
-      });
-
-    app.Add("create", async Task<int> ([Argument] string outputManifest,
-      string? root = null, string algorithm = "SHA256",
-      int? threads = null,
-      string? include = null,
-      string? exclude = null,
-      CancellationToken cancellationToken = default) => {
-        try {
-          var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(outputManifest) : algorithm;
-          var options = new CliOptions(new FileInfo(outputManifest),
-            !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null, usedAlgorithm,
-            null,
-            false,
-            GlobUtils.NormalizeGlobs(include, false),
-            GlobUtils.NormalizeGlobs(exclude, true));
-          var exitCode = await RunCreateManifest(options, threads ?? Environment.ProcessorCount, cancellationToken);
-          return exitCode;
-        } catch (OperationCanceledException) {
-          AnsiConsole.MarkupLine("[red]Interrupted by user[/]");
-          return -2;
-        }
-      });
-
-    app.Add("add", async Task<int> ([Argument] string manifestPath,
-      string? root = null, string algorithm = "SHA256",
-      int? threads = null,
-      string? include = null,
-      string? exclude = null,
-      CancellationToken cancellationToken = default) => {
-        try {
-          var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(manifestPath) : algorithm;
-          var options = new CliOptions(new FileInfo(manifestPath),
-            !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null, usedAlgorithm,
-            null,
-            false,
-            GlobUtils.NormalizeGlobs(include, false),
-            GlobUtils.NormalizeGlobs(exclude, true));
-          var exitCode = await RunAddToManifest(options, threads ?? Environment.ProcessorCount, cancellationToken);
-          return exitCode;
-        } catch (OperationCanceledException) {
-          AnsiConsole.MarkupLine("[red]Interrupted by user[/]");
-          return -2;
-        }
-      });
-    await app.RunAsync(args);
+      CancellationToken cancellationToken = default
+  )
+  {
+    try {
+      var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(checksumFile) : algorithm;
+      var options = new CliOptions(new FileInfo(checksumFile),
+        !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null, usedAlgorithm,
+        !string.IsNullOrWhiteSpace(tsvReport) ? new FileInfo(tsvReport) : null,
+        showTable,
+        GlobUtils.NormalizeGlobs(include, false),
+        GlobUtils.NormalizeGlobs(exclude, true));
+      return await RunVerification(options, threads ?? Environment.ProcessorCount, cancellationToken);
+    } catch (OperationCanceledException) { AnsiConsole.MarkupLine("[red]Interrupted by user[/]"); return -2; }
   }
+
+  /// <summary>
+  /// Creates a new checksum manifest from a directory.
+  /// </summary>
+  /// <param name="outputManifest">Path for the output manifest file.</param>
+  /// <param name="root">-r, The root directory to scan for files. Defaults to the manifest's directory.</param>
+  /// <param name="algorithm">-a, Hashing algorithm to use (e.g., SHA256, MD5). Inferred from extension if omitted.</param>
+  /// <param name="threads">-t, Number of parallel threads to use. Defaults to processor count.</param>
+  /// <param name="include">Semicolon-separated glob patterns for files to include in the manifest.</param>
+  /// <param name="exclude">Semicolon-separated glob patterns for files to exclude from the manifest.</param>
+  [Command("create")]
+  public async Task<int> Create(
+      [Argument] string outputManifest,
+      string? root = null,
+      string algorithm = "SHA256",
+      int? threads = null,
+      string? include = null,
+      string? exclude = null,
+      CancellationToken cancellationToken = default)
+  {
+    try {
+      var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(outputManifest) : algorithm;
+      var options = new CliOptions(new FileInfo(outputManifest),
+        !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null, usedAlgorithm,
+        null, // tsvReport is not applicable for create
+        false, // showTable is not applicable for create
+        GlobUtils.NormalizeGlobs(include, false),
+        GlobUtils.NormalizeGlobs(exclude, true));
+
+      return await RunCreateManifest(options, threads ?? Environment.ProcessorCount, cancellationToken);
+    } catch (OperationCanceledException) {
+      AnsiConsole.MarkupLine("[red]Interrupted by user[/]");
+      return -2;
+    }
+  }
+
+  /// <summary>
+  /// Scans a directory and adds new, unlisted files to an existing manifest.
+  /// </summary>
+  /// <param name="manifestPath">Path to the existing manifest file to update.</param>
+  /// <param name="root">-r, The root directory to scan for new files. Defaults to the manifest's directory.</param>
+  /// <param name="algorithm">-a, Hashing algorithm to use (e.g., SHA256, MD5). Inferred from extension if omitted.</param>
+  /// <param name="threads">-t, Number of parallel threads to use. Defaults to processor count.</param>
+  /// <param name="include">Semicolon-separated glob patterns for new files to include.</param>
+  /// <param name="exclude">Semicolon-separated glob patterns for files to exclude from being added.</param>
+  [Command("add")]
+  public async Task<int> Add(
+      [Argument] string manifestPath,
+      string? root = null,
+      string algorithm = "SHA256",
+      int? threads = null,
+      string? include = null,
+      string? exclude = null,
+      CancellationToken cancellationToken = default)
+  {
+    try {
+      var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(manifestPath) : algorithm;
+      var options = new CliOptions(new FileInfo(manifestPath),
+        !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null, usedAlgorithm,
+        null, // tsvReport is not applicable for add
+        false, // showTable is not applicable for add
+        GlobUtils.NormalizeGlobs(include, false),
+        GlobUtils.NormalizeGlobs(exclude, true));
+
+      return await RunAddToManifest(options, threads ?? Environment.ProcessorCount, cancellationToken);
+    } catch (OperationCanceledException) {
+      AnsiConsole.MarkupLine("[red]Interrupted by user[/]");
+      return -2;
+    }
+  }
+
 
   public static async Task<int> RunVerification(CliOptions options, int threads, CancellationToken cancellationToken)
   {
