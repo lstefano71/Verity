@@ -7,64 +7,51 @@ on:
       - 'feature/**'
 
 jobs:
-  # --- JOB 1: Build the application on Windows ---
+  # JOB 1: Build the application on Windows (This job remains unchanged)
   build:
     name: Build on Windows
     runs-on: windows-latest
-    # Define outputs that the next job can use
     outputs:
       artifact_name: ${{ steps.get_artifact.outputs.ARTIFACT_NAME }}
       tag_name: ${{ steps.get_version.outputs.TAG_NAME }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
-
       - name: Install Nerdbank.GitVersioning tool
         run: dotnet tool install -g nbgv
-
       - name: Restore dependencies
         run: dotnet tool restore
-
       - name: Run Cake build and package
         run: dotnet cake --target=Package --configuration=Release
-
       - name: Get Release Version
         id: get_version
         run: echo "TAG_NAME=v$(nbgv get-version -v NuGetPackageVersion)" >> $env:GITHUB_OUTPUT
         shell: pwsh
-      
-      # Use a more robust way to find the artifact and its name
       - name: Get Artifact Details
         id: get_artifact
         shell: pwsh
         run: |
           $artifact = Get-ChildItem ./artifacts/*.zip | Select-Object -First 1
           echo "ARTIFACT_NAME=$($artifact.Name)" >> $env:GITHUB_OUTPUT
-
-      # Upload the packaged .zip file so the release job can download it
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: verity-package
           path: ./artifacts/${{ steps.get_artifact.outputs.ARTIFACT_NAME }}
 
-
-  # --- JOB 2: Create the Release on Linux ---
+  # JOB 2: Create the Release on Linux (This job is corrected)
   release:
     name: Create Release on Linux
-    # This job will only run after the 'build' job has succeeded
     needs: build
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Required to create releases
+      contents: write 
     
     steps:
       - name: Checkout code
@@ -72,19 +59,28 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Download the .zip file that the 'build' job uploaded
       - name: Download Artifact
         uses: actions/download-artifact@v4
         with:
           name: verity-package
           
-      - name: Generate Changelog
-        id: changelog
+      - name: Generate Changelog File
+        id: generate_changelog_file
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
-          # Use the tag from the build job to generate changelog from correct range
           args: --tag ${{ needs.build.outputs.tag_name }} --strip header
+
+      # --- THIS IS THE NEW STEP THAT FIXES THE PROBLEM ---
+      - name: Read Changelog File Content
+        id: read_changelog
+        shell: bash
+        run: |
+          CHANGELOG_PATH=$(echo "${{ steps.generate_changelog_file.outputs.changelog }}")
+          CHANGELOG_BODY=$(cat $CHANGELOG_PATH)
+          echo 'changelog_content<<EOF' >> $GITHUB_OUTPUT
+          echo "$CHANGELOG_BODY" >> $GITHUB_OUTPUT
+          echo 'EOF' >> $GITHUB_OUTPUT
           
       - name: Create GitHub Release
         id: create_release
@@ -92,7 +88,8 @@ jobs:
         with:
           tag_name: ${{ needs.build.outputs.tag_name }}
           name: Release ${{ needs.build.outputs.tag_name }}
-          body: ${{ steps.changelog.outputs.changelog }}
-          # Attach the downloaded .zip file to the release
+          # Use the output from our new "read_changelog" step
+          body: ${{ steps.read_changelog.outputs.changelog_content }}
           files: ${{ needs.build.outputs.artifact_name }}
           prerelease: ${{ startsWith(github.ref, 'refs/heads/feature/') }}
+
