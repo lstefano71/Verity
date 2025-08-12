@@ -69,8 +69,6 @@ jobs:
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
-          # Use --latest to automatically find the previous tag and go to HEAD
-          args: --latest
           
       - name: Prepare Release Body
         id: prep_body
