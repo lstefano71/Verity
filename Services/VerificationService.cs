@@ -37,6 +37,7 @@ public class VerificationService
 
   public async Task<FinalSummary> VerifyChecksumsAsync(
       CliOptions options,
+      IReadOnlyList<ManifestEntry> manifestEntries,
       CancellationToken cancellationToken,
       int parallelism = -1,
       ProgressContext? ctx = null
@@ -45,7 +46,7 @@ public class VerificationService
     if (parallelism <= 0) parallelism = Environment.ProcessorCount;
     var rootPath = options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName!;
     var checksumFileTimestamp = options.ChecksumFile.LastWriteTimeUtc;
-    int totalFiles = 0;
+    int totalFiles = manifestEntries.Count;
 
     var jobChannel = Channel.CreateBounded<VerificationJob>(parallelism * 2);
     var resultChannel = Channel.CreateUnbounded<VerificationResult>();
@@ -57,14 +58,9 @@ public class VerificationService
     var unlistedFiles = new List<string>();
 
     var producer = Task.Run(async () => {
-      await foreach (var line in File.ReadLinesAsync(options.ChecksumFile.FullName, cancellationToken)) {
+      foreach (var entry in manifestEntries) {
         cancellationToken.ThrowIfCancellationRequested();
-        if (string.IsNullOrWhiteSpace(line)) continue;
-        var parts = line.Split('\t', 2);
-        if (parts.Length != 2) continue;
-
-        var entry = new ChecksumEntry(parts[0].ToLowerInvariant(), parts[1]);
-        var fullPath = Path.GetFullPath(entry.RelativePath, rootPath);
+        var fullPath = Path.GetFullPath(entry.RelativePath!, rootPath);
         allListedFiles.TryAdd(fullPath, 0);
 
         long fileSize = -1;
@@ -74,8 +70,7 @@ public class VerificationService
           // Will be handled by the consumer as a file not found error.
         }
 
-        await jobChannel.Writer.WriteAsync(new VerificationJob(entry, fileSize), cancellationToken);
-        totalFiles++;
+        await jobChannel.Writer.WriteAsync(new VerificationJob(new ChecksumEntry(entry.Hash!, entry.RelativePath!), fileSize), cancellationToken);
       }
       jobChannel.Writer.Complete();
     }, cancellationToken);
@@ -154,13 +149,16 @@ public class VerificationService
       }
     }
 
+    var manifestRelPaths = new HashSet<string>(manifestEntries.Select(e => e.RelativePath!), StringComparer.OrdinalIgnoreCase);
     var allFilesInRoot = Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories);
-    foreach (var file in allFilesInRoot) {
+    var filteredFiles = GlobUtils.FilterFiles(allFilesInRoot, rootPath, options.IncludeGlobs, options.ExcludeGlobs);
+    foreach (var relFile in filteredFiles) {
+      var absFile = Path.Combine(rootPath, relFile);
       cancellationToken.ThrowIfCancellationRequested();
-      if (!allListedFiles.ContainsKey(file) && !file.Equals(options.ChecksumFile.FullName, StringComparison.OrdinalIgnoreCase)) {
+      if (!manifestRelPaths.Contains(relFile) && !absFile.Equals(options.ChecksumFile.FullName, StringComparison.OrdinalIgnoreCase)) {
         warnings++;
-        FileFoundNotInChecksumList?.Invoke(file);
-        unlistedFiles.Add(file);
+        FileFoundNotInChecksumList?.Invoke(absFile);
+        unlistedFiles.Add(absFile);
       }
     }
 

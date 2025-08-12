@@ -101,10 +101,11 @@ public class ManifestCreationService
     return 0;
   }
 
-  public async Task<int> CreateManifestAsync(FileInfo outputManifest, DirectoryInfo root, string algorithm, int threads, CancellationToken cancellationToken, ProgressContext? ctx = null)
+  public async Task<int> CreateManifestAsync(FileInfo outputManifest, DirectoryInfo root, string algorithm, IEnumerable<string> files, int threads, CancellationToken cancellationToken, ProgressContext? ctx = null)
   {
-    var files = Directory.GetFiles(root.FullName, "*", SearchOption.AllDirectories);
-    return await ProcessManifestFilesAsync(ManifestOperationMode.Create, outputManifest, root, algorithm, files, threads, ctx, cancellationToken);
+    // Compose full file paths from root and relative file names
+    var fullPaths = files.Select(f => Path.Combine(root.FullName, f));
+    return await ProcessManifestFilesAsync(ManifestOperationMode.Create, outputManifest, root, algorithm, fullPaths, threads, ctx, cancellationToken);
   }
 
   public async Task<int> AddToManifestAsync(FileInfo manifestFile, DirectoryInfo root, string algorithm, List<string> filesToAdd, int threads, CancellationToken cancellationToken, ProgressContext? ctx = null)

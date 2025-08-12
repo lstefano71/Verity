@@ -2,7 +2,7 @@
   "profiles": {
     "Verity": {
       "commandName": "Project",
-      "commandLineArgs": "verify d:\\trash\\test.sha256 --root D:\\trash\\sofia\\vittoria\\ --include *.mfs"
+      "commandLineArgs": "verify d:\\trash\\test.sha256 --root D:\\trash\\sofia\\vittoria\\ --exclude **/*.d*"
     }
   }
 }

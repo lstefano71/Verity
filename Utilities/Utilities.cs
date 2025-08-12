@@ -1,4 +1,7 @@
-﻿using Spectre.Console;
+﻿using Microsoft.Extensions.FileSystemGlobbing;
+using Microsoft.Extensions.FileSystemGlobbing.Abstractions;
+
+using Spectre.Console;
 
 public static class Utilities
 {
@@ -43,7 +46,7 @@ public static class Utilities
   }
 
   // Helper to build a Spectre.Console Panel for header info
-  public static Panel BuildHeaderPanel(string title, DateTime startTime, string manifestName, string algorithm, string root)
+  public static Panel BuildHeaderPanel(string title, DateTime startTime, string manifestName, string algorithm, string root, string[]? includeGlobs = null, string[]? excludeGlobs = null)
   {
     var entryAssembly = System.Reflection.Assembly.GetEntryAssembly();
     var versionAttr = entryAssembly?.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
@@ -54,8 +57,56 @@ public static class Utilities
       $"[bold]Version:[/] {version}\n[bold]Started:[/] {startTime:yyyy-MM-dd HH:mm:ss}\n" +
       $"[bold]Manifest:[/] {manifestName}\n" +
       $"[bold]Algorithm:[/] {algorithm}\n[bold]Root:[/] {root}\n";
+    if (includeGlobs is { Length: > 0 } && (includeGlobs.Length != 1 || includeGlobs[0] != "*"))
+      content += $"[bold]Include:[/] {string.Join(", ", includeGlobs)}\n";
+    if (excludeGlobs is { Length: > 0 })
+      content += $"[bold]Exclude:[/] {string.Join(", ", excludeGlobs)}\n";
     return new Panel(content)
       .Header($"[bold]{title}[/]", Justify.Center)
       .Expand();
+  }
+}
+
+public static class GlobUtils
+{
+  // Normalizes a semicolon-separated glob string into an array of patterns
+  public static string[] NormalizeGlobs(string? globs, bool isExclude = false)
+  {
+    if (string.IsNullOrWhiteSpace(globs))
+      return isExclude ? [] : ["**/*"];
+    return globs.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+  }
+
+  // Returns true if the file (relative to root) matches the include/exclude globs
+  public static bool IsMatch(string relativePath, string[]? includeGlobs, string[]? excludeGlobs)
+  {
+    var matcher = new Matcher(StringComparison.OrdinalIgnoreCase);
+    if (includeGlobs is { Length: > 0 })
+      matcher.AddIncludePatterns(includeGlobs);
+    else
+      matcher.AddInclude("*");
+    if (excludeGlobs is { Length: > 0 })
+      matcher.AddExcludePatterns(excludeGlobs);
+    var matchResult = matcher.Match(relativePath);
+    return matchResult.HasMatches;
+  }
+
+  // Filters a list of files (full paths) to those matching the globs, returning relative paths
+  public static List<string> FilterFiles(IEnumerable<string> files, string root, string[]? includeGlobs, string[]? excludeGlobs)
+  {
+    var matcher = new Matcher(StringComparison.OrdinalIgnoreCase);
+    if (includeGlobs is { Length: > 0 })
+      matcher.AddIncludePatterns(includeGlobs);
+    else
+      matcher.AddInclude("**/*");
+    if (excludeGlobs is { Length: > 0 })
+      matcher.AddExcludePatterns(excludeGlobs);
+    var dirInfo = new DirectoryInfoWrapper(new DirectoryInfo(root));
+    var matchResult = matcher.Execute(dirInfo);
+    // Normalize path separators for matching
+    static string Normalize(string path) => path.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+    var matched = new HashSet<string>(matchResult.Files.Select(f => Normalize(f.Path)), StringComparer.OrdinalIgnoreCase);
+    var relFiles = files.Select(f => Normalize(Path.GetRelativePath(root, f)));
+    return [.. relFiles.Where(matched.Contains)];
   }
 }

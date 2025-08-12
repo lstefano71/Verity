@@ -16,13 +16,17 @@ public class Program
       int? threads = null,
       string? tsvReport = null,
       bool showTable = false,
+      string? include = null,
+      string? exclude = null,
       CancellationToken cancellationToken = default) => {
         try {
           var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(checksumFile) : algorithm;
           var options = new CliOptions(new FileInfo(checksumFile),
             !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null, usedAlgorithm,
             !string.IsNullOrWhiteSpace(tsvReport) ? new FileInfo(tsvReport) : null,
-            showTable);
+            showTable,
+            GlobUtils.NormalizeGlobs(include, false),
+            GlobUtils.NormalizeGlobs(exclude, true));
           var exitCode = await RunVerification(options, threads ?? Environment.ProcessorCount, cancellationToken);
           return exitCode;
         } catch (OperationCanceledException) {
@@ -30,30 +34,42 @@ public class Program
           return -2;
         }
       });
+
     app.Add("create", async Task<int> ([Argument] string outputManifest,
       string? root = null, string algorithm = "SHA256",
       int? threads = null,
+      string? include = null,
+      string? exclude = null,
       CancellationToken cancellationToken = default) => {
         try {
           var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(outputManifest) : algorithm;
           var exitCode = await RunCreateManifest(new FileInfo(outputManifest),
             !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null,
-            usedAlgorithm, threads ?? Environment.ProcessorCount, cancellationToken);
+            usedAlgorithm, threads ?? Environment.ProcessorCount,
+            GlobUtils.NormalizeGlobs(include, false),
+            GlobUtils.NormalizeGlobs(exclude, true),
+            cancellationToken);
           return exitCode;
         } catch (OperationCanceledException) {
           AnsiConsole.MarkupLine("[red]Interrupted by user[/]");
           return -2;
         }
       });
+
     app.Add("add", async Task<int> ([Argument] string manifestPath,
       string? root = null, string algorithm = "SHA256",
       int? threads = null,
+      string? include = null,
+      string? exclude = null,
       CancellationToken cancellationToken = default) => {
         try {
           var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(manifestPath) : algorithm;
           var exitCode = await RunAddToManifest(new FileInfo(manifestPath),
             !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null,
-            usedAlgorithm, threads ?? Environment.ProcessorCount, cancellationToken);
+            usedAlgorithm, threads ?? Environment.ProcessorCount,
+            GlobUtils.NormalizeGlobs(include, false),
+            GlobUtils.NormalizeGlobs(exclude, true),
+            cancellationToken);
           return exitCode;
         } catch (OperationCanceledException) {
           AnsiConsole.MarkupLine("[red]Interrupted by user[/]");
@@ -71,11 +87,13 @@ public class Program
         startTime,
         options.ChecksumFile.Name,
         options.Algorithm,
-        options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName!
+        options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName!,
+        options.IncludeGlobs,
+        options.ExcludeGlobs
     );
     AnsiConsole.Write(headerPanel);
 
-    IReadOnlyList<ManifestEntry> manifestEntries;
+    IReadOnlyList<ManifestEntry> manifestEntries = [];
     int totalFiles = 0;
     long totalBytes = 0;
     await AnsiConsole.Status()
@@ -83,9 +101,13 @@ public class Program
         .SpinnerStyle(Style.Parse("green"))
         .StartAsync($"Reading manifest: {options.ChecksumFile.FullName}...", async ctx => {
           var reader = new ManifestReader(options.ChecksumFile, options.RootDirectory);
-          manifestEntries = await reader.ReadEntriesAsync(cancellationToken);
+          var entries = await reader.ReadEntriesAsync(cancellationToken);
+          manifestEntries = [.. entries.Where(e => e != null && GlobUtils.IsMatch(e.RelativePath!, options.IncludeGlobs, options.ExcludeGlobs))];
           totalFiles = manifestEntries.Count;
-          totalBytes = await reader.GetTotalBytesAsync(cancellationToken);
+          totalBytes = manifestEntries.Select(e => {
+            var fullPath = options.RootDirectory != null ? Path.Combine(options.RootDirectory.FullName, e.RelativePath!) : Path.Combine(options.ChecksumFile.DirectoryName!, e.RelativePath!);
+            return File.Exists(fullPath) ? new FileInfo(fullPath).Length : 0L;
+          }).Sum();
           await Task.Delay(100, cancellationToken); // Ensure spinner is visible
         });
 
@@ -120,7 +142,7 @@ public class Program
           };
           verificationService.FileFoundNotInChecksumList += (path) => { };
 
-          summary = await verificationService.VerifyChecksumsAsync(options, cancellationToken, threads, ctx);
+          summary = await verificationService.VerifyChecksumsAsync(options, manifestEntries, cancellationToken, threads, ctx);
           mainTask.StopTask();
         });
 
@@ -146,6 +168,8 @@ public class Program
     DirectoryInfo? root,
     string algorithm,
     int threads,
+    string[]? includeGlobs,
+    string[]? excludeGlobs,
     CancellationToken cancellationToken)
   {
     var startTime = DateTime.Now;
@@ -157,7 +181,9 @@ public class Program
         startTime,
         manifestFile.Name,
         algorithm,
-        rootPath
+        rootPath,
+        includeGlobs,
+        excludeGlobs
     );
     AnsiConsole.Write(headerPanel);
 
@@ -174,8 +200,10 @@ public class Program
           .Spinner(Spinner.Known.Dots)
           .SpinnerStyle(Style.Parse("green"))
           .StartAsync($"Calculating total size: {rootPath}...", async ctx => {
-            files = Directory.GetFiles(rootPath, "*", SearchOption.AllDirectories);
-            totalBytes = files.Select(f => new FileInfo(f).Length).Sum();
+            var allFiles = Directory.GetFiles(rootPath, "*", SearchOption.AllDirectories);
+            var relFiles = GlobUtils.FilterFiles(allFiles, rootPath, includeGlobs, excludeGlobs);
+            files = [.. relFiles];
+            totalBytes = files.Select(f => new FileInfo(Path.Combine(rootPath, f)).Length).Sum();
             await Task.Delay(100, cancellationToken);
           });
       if (files is null or []) {
@@ -197,17 +225,16 @@ public class Program
           .Spinner(Spinner.Known.Dots)
           .SpinnerStyle(Style.Parse("green"))
           .StartAsync($"Scanning directory: {rootPath}...", async ctx => {
-            files = Directory.GetFiles(rootPath, "*", SearchOption.AllDirectories);
+            var allFiles = Directory.GetFiles(rootPath, "*", SearchOption.AllDirectories);
+            var filteredFiles = GlobUtils.FilterFiles(allFiles, rootPath, includeGlobs, excludeGlobs);
+            newFiles = [.. filteredFiles
+              .Where(rel => !listedFiles.Contains(rel))];
+            if (newFiles.Count == 0) {
+              AnsiConsole.MarkupLine("[yellow]No new files to add to manifest.[/]");
+            }
+            totalBytes = newFiles.Select(f => new FileInfo(Path.Combine(rootPath, f)).Length).Sum();
             await Task.Delay(100, cancellationToken);
           });
-      newFiles = [.. files
-        .Select(f => Path.GetRelativePath(rootPath, f))
-        .Where(rel => !listedFiles.Contains(rel))];
-      if (newFiles.Count == 0) {
-        AnsiConsole.MarkupLine("[yellow]No new files to add to manifest.[/]");
-        return 0;
-      }
-      totalBytes = newFiles.Select(f => new FileInfo(Path.Combine(rootPath, f)).Length).Sum();
     }
 
     long totalBytesRead = 0;
@@ -216,13 +243,13 @@ public class Program
     await AnsiConsole.Progress()
         .AutoClear(true)
         .HideCompleted(true)
-        .Columns([
+        .Columns(
             new TaskDescriptionColumn(),
             new ProgressBarColumn(),
             new PercentageColumn(),
             new RemainingTimeColumn(),
-            new SpinnerColumn(),
-        ])
+            new SpinnerColumn()
+        )
         .StartAsync(async ctx => {
           var mainTask = ctx.AddTask($"[green]{(mode == ManifestOperationMode.Create ? "Creating manifest" : "Adding to manifest")} ({totalBytes.Bytes().Humanize()})[/]", maxValue: totalBytes);
           var manifestService = new ManifestCreationService();
@@ -243,7 +270,7 @@ public class Program
           if (mode == ManifestOperationMode.Create)
             exitCode = await manifestService.CreateManifestAsync(manifestFile,
               new DirectoryInfo(rootPath), algorithm,
-              threads, cancellationToken, ctx);
+              files, threads, cancellationToken, ctx);
           else
             exitCode = await manifestService.AddToManifestAsync(manifestFile,
               new DirectoryInfo(rootPath), algorithm,
@@ -273,15 +300,15 @@ public class Program
   }
 
   public static async Task<int> RunCreateManifest(FileInfo outputManifest,
-    DirectoryInfo? root, string algorithm, int threads, CancellationToken cancellationToken)
+    DirectoryInfo? root, string algorithm, int threads, string[]? includeGlobs, string[]? excludeGlobs, CancellationToken cancellationToken)
   {
-    return await RunManifestOperation(ManifestOperationMode.Create, outputManifest, root, algorithm, threads, cancellationToken);
+    return await RunManifestOperation(ManifestOperationMode.Create, outputManifest, root, algorithm, threads, includeGlobs, excludeGlobs, cancellationToken);
   }
 
   public static async Task<int> RunAddToManifest(FileInfo manifestFile,
-    DirectoryInfo? root, string algorithm, int threads, CancellationToken cancellationToken)
+    DirectoryInfo? root, string algorithm, int threads, string[]? includeGlobs, string[]? excludeGlobs, CancellationToken cancellationToken)
   {
-    return await RunManifestOperation(ManifestOperationMode.Add, manifestFile, root, algorithm, threads, cancellationToken);
+    return await RunManifestOperation(ManifestOperationMode.Add, manifestFile, root, algorithm, threads, includeGlobs, excludeGlobs, cancellationToken);
   }
 
   public static string InferAlgorithmFromExtension(string manifestPath)

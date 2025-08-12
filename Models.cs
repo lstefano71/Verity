@@ -3,7 +3,9 @@ public record struct CliOptions(
     DirectoryInfo? RootDirectory,
     string Algorithm,
     FileInfo? TsvReportFile = null,
-    bool ShowTable = false
+    bool ShowTable = false,
+    string[]? IncludeGlobs = null,
+    string[]? ExcludeGlobs = null
 );
 
 public record ChecksumEntry(
