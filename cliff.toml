@@ -1,5 +1,11 @@
+# A configuration file for git-cliff.
+# See: https://github.com/orhun/git-cliff#configuration-file
+
 [changelog]
-header = "## What's New\n"
+# A decorated header for the changelog.
+header = """
+""" # We will generate the header in the workflow itself.
+# The template for the changelog body.
 body = """
 {% for group, commits in commits | group_by(attribute="group") | sort(attribute="group") %}
     ### {{ group }}
@@ -8,10 +14,11 @@ body = """
     {% endfor %}
 {% endfor %}
 """
+# Remove trailing newlines from the changelog.
 trim = true
 
 [git]
-# Process these rules in order. The first one that matches wins.
+# A list of commit types to be used for grouping.
 commit_parsers = [
   { message = "^feat", group = "🚀 Features" },
   { message = "^fix", group = "🐛 Bug Fixes" },
@@ -19,9 +26,17 @@ commit_parsers = [
   { message = "^chore", group = "🧹 Maintenance" },
   { message = "^docs", group = "📚 Documentation" },
   # This is the catch-all. It MUST be last.
-  # Any commit that didn't match the rules above will be put in "Changes".
   { message = "^.*", group = "Miscellaneous Changes" },
 ]
-ignore_tags = ""
-latest_tag = "v_._._"
 
+# --- THIS IS THE NEW SECTION THAT FIXES THE TRUNCATION ---
+# Overrides the default preprocessors to prevent truncation of the commit message.
+commit_preprocessors = [
+  # This regex captures the entire first line of the commit message.
+  { pattern = '^(.*)', message = "$1" },
+]
+
+# Ignore commits from the changelog.
+ignore_tags = ""
+# Process commits from the latest tag to the current HEAD.
+latest_tag = "v_._._"

@@ -7,7 +7,7 @@ on:
       - 'feature/**'
 
 jobs:
-  # JOB 1: Build the application on Windows (This job remains unchanged)
+  # JOB 1: Build on Windows (This job remains unchanged)
   build:
     name: Build on Windows
     runs-on: windows-latest
@@ -64,23 +64,13 @@ jobs:
         with:
           name: verity-package
           
-      - name: Generate Changelog File
-        id: generate_changelog_file
+      - name: Generate Changelog
+        id: generate_changelog
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
-          args: --tag ${{ needs.build.outputs.tag_name }} --strip header
-
-      # --- THIS IS THE NEW STEP THAT FIXES THE PROBLEM ---
-      - name: Read Changelog File Content
-        id: read_changelog
-        shell: bash
-        run: |
-          CHANGELOG_PATH=$(echo "${{ steps.generate_changelog_file.outputs.changelog }}")
-          CHANGELOG_BODY=$(cat $CHANGELOG_PATH)
-          echo 'changelog_content<<EOF' >> $GITHUB_OUTPUT
-          echo "$CHANGELOG_BODY" >> $GITHUB_OUTPUT
-          echo 'EOF' >> $GITHUB_OUTPUT
+          # Use --latest to automatically find the previous tag and go to HEAD
+          args: --latest
           
       - name: Create GitHub Release
         id: create_release
@@ -88,8 +78,11 @@ jobs:
         with:
           tag_name: ${{ needs.build.outputs.tag_name }}
           name: Release ${{ needs.build.outputs.tag_name }}
-          # Use the output from our new "read_changelog" step
-          body: ${{ steps.read_changelog.outputs.changelog_content }}
+          # Combine the changelog body with a dynamically generated "Full Changelog" link
+          body: |
+            ${{ steps.generate_changelog.outputs.changelog }}
+
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ steps.generate_changelog.outputs.previous_tag }}...${{ needs.build.outputs.tag_name }}
           files: ${{ needs.build.outputs.artifact_name }}
           prerelease: ${{ startsWith(github.ref, 'refs/heads/feature/') }}
 
