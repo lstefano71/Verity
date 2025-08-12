@@ -199,10 +199,9 @@ public class Program
             files = Directory.GetFiles(rootPath, "*", SearchOption.AllDirectories);
             await Task.Delay(100, cancellationToken);
           });
-      newFiles = files
+      newFiles = [.. files
         .Select(f => Path.GetRelativePath(rootPath, f))
-        .Where(rel => !listedFiles.Contains(rel))
-        .ToList();
+        .Where(rel => !listedFiles.Contains(rel))];
       if (newFiles.Count == 0) {
         AnsiConsole.MarkupLine("[yellow]No new files to add to manifest.[/]");
         return 0;
