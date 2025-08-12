@@ -29,6 +29,8 @@ public class ResultsPresenter
     if ((summary.ProblematicResults?.Count ?? 0) == 0 && (summary.UnlistedFiles?.Count ?? 0) == 0)
       return;
 
+    const int hashDisplayLen = 12;
+
     AnsiConsole.WriteLine();
     var table = new Table().Expand();
     table.Border = TableBorder.Rounded;
@@ -38,6 +40,10 @@ public class ResultsPresenter
     table.AddColumn("Details");
     table.AddColumn("Expected Hash");
     table.AddColumn("Actual Hash");
+
+    string TruncateHash(string? hash) =>
+      string.IsNullOrEmpty(hash) ? "N/A" :
+      hash.Length > hashDisplayLen ? hash.Substring(0, hashDisplayLen) + "…" : hash;
 
     foreach (var result in summary.ProblematicResults.OrderBy(r => r.Status).ThenBy(r => r.Entry.RelativePath)) {
       var statusMarkup = result.Status switch {
@@ -49,8 +55,8 @@ public class ResultsPresenter
           statusMarkup,
           result.FullPath ?? result.Entry.RelativePath,
           result.Details ?? string.Empty,
-          result.Entry.ExpectedHash,
-          result.ActualHash ?? "N/A"
+          TruncateHash(result.Entry.ExpectedHash),
+          TruncateHash(result.ActualHash)
       );
     }
 
@@ -67,7 +73,7 @@ public class ResultsPresenter
     AnsiConsole.Write(table);
   }
 
-  public static async Task WriteErrorReportAsync(FinalSummary summary)
+  public static async Task WriteErrorReportAsync(FinalSummary summary, FileInfo? outputFile = null)
   {
     var errorReport = new StringBuilder();
     errorReport.AppendLine("#Status\tFile\tDetails\tExpectedHash\tActualHash");
@@ -92,6 +98,12 @@ public class ResultsPresenter
       ));
     }
 
-    await global::System.Console.Error.WriteAsync(errorReport.ToString());
+    if (outputFile != null) {
+      await File.WriteAllTextAsync(outputFile.FullName, errorReport.ToString());
+    }
+    // Only write to stderr if no output file specified
+    else {
+      await global::System.Console.Error.WriteAsync(errorReport.ToString());
+    }
   }
 }

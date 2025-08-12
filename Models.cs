@@ -1,8 +1,9 @@
-
 public record struct CliOptions(
     FileInfo ChecksumFile,
     DirectoryInfo? RootDirectory,
-    string Algorithm
+    string Algorithm,
+    FileInfo? TsvReportFile = null,
+    bool ShowTable = false
 );
 
 public record ChecksumEntry(

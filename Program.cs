@@ -15,11 +15,15 @@ public class Program
     app.Add("verify", async Task<int> ([Argument] string checksumFile,
       string? root = null, string algorithm = "SHA256",
       int? threads = null,
+      string? tsvReport = null,
+      bool showTable = false,
       CancellationToken cancellationToken = default) => {
         try {
           var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(checksumFile) : algorithm;
           var options = new CliOptions(new FileInfo(checksumFile),
-            !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null, usedAlgorithm);
+            !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null, usedAlgorithm,
+            !string.IsNullOrWhiteSpace(tsvReport) ? new FileInfo(tsvReport) : null,
+            showTable);
           var exitCode = await RunVerification(options, threads ?? Environment.ProcessorCount, cancellationToken);
           return exitCode;
         } catch (OperationCanceledException) {
@@ -129,8 +133,10 @@ public class Program
 
     var presenter = new ResultsPresenter();
     ResultsPresenter.RenderSummaryTable(summary, stopwatch.Elapsed);
-    ResultsPresenter.RenderDiagnosticsTable(summary);
-    await ResultsPresenter.WriteErrorReportAsync(summary);
+    if (options.ShowTable)
+      ResultsPresenter.RenderDiagnosticsTable(summary);
+    if (options.TsvReportFile != null)
+      await ResultsPresenter.WriteErrorReportAsync(summary, options.TsvReportFile);
 
     if (summary.ErrorCount > 0) return -1;
     if (summary.WarningCount > 0) return 1;
