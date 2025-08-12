@@ -1,0 +1,27 @@
+[changelog]
+header = "## What's New\n"
+body = """
+{% for group, commits in commits | group_by(attribute="group") | sort(attribute="group") %}
+    ### {{ group }}
+    {% for commit in commits %}
+        - {{ commit.message | upper_first }} ([`{{ commit.id | truncate(length=7, end="") }}`](https://github.com/{{ remote.owner }}/{{ remote.repo }}/commit/{{ commit.id }}))
+    {% endfor %}
+{% endfor %}
+"""
+trim = true
+
+[git]
+# Process these rules in order. The first one that matches wins.
+commit_parsers = [
+  { message = "^feat", group = "🚀 Features" },
+  { message = "^fix", group = "🐛 Bug Fixes" },
+  { message = "^perf", group = "⚡ Performance" },
+  { message = "^chore", group = "🧹 Maintenance" },
+  { message = "^docs", group = "📚 Documentation" },
+  # This is the catch-all. It MUST be last.
+  # Any commit that didn't match the rules above will be put in "Changes".
+  { message = "^.*", group = "Miscellaneous Changes" },
+]
+ignore_tags = ""
+latest_tag = "v_._._"
+

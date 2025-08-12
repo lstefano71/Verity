@@ -55,32 +55,24 @@ jobs:
         shell: pwsh
         
       # Step 7: Generate the release notes from the commit messages
-      - name: Generate Release Notes from Commits
-        id: generate_changelog
-        shell: pwsh
-        run: |
-          if ("${{ github.event.before }}" -eq "0000000000000000000000000000000000000000") {
-            $rawChangelog = git log --pretty=format:'- %s'
-          } else {
-            $rawChangelog = git log --pretty=format:'- %s' ${{ github.event.before }}...${{ github.event.after }}
-          }
-          # Properly encode for GitHub Actions output (replace %, CR, LF)
-          $changelog = $rawChangelog -replace '%','%25' -replace "`r","%0D" -replace "`n","%0A"
-          # Output to GITHUB_OUTPUT so multiline is preserved
-          Write-Output "CHANGELOG=$changelog" >> $env:GITHUB_OUTPUT
-                    
+      - name: Generate Changelog
+        id: changelog
+        uses: orhun/git-cliff-action@v3
+        with:
+          # Use the configuration file we created
+          config: cliff.toml
+          # Get commits between the previous tag and the latest commit
+          args: --latest --strip header
+        # The 'changelog' output from this action is now clean and multiline                    
+
         # Step 8: Create the GitHub Release and upload the artifact
       - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          # The name of the tag to create, e.g., "v1.2.3"
           tag_name: ${{ steps.get_version.outputs.TAG_NAME }}
-          # The title of the release, e.g., "Release v1.2.3"
           name: Release ${{ steps.get_version.outputs.TAG_NAME }}
-          # The body/description of the release, taken from our commit messages
-          body: ${{ steps.generate_changelog.outputs.CHANGELOG }}
-          # The path to the zip file to upload as an attachment
+          # Feed the clean, multiline changelog from the previous step
+          body: ${{ steps.changelog.outputs.changelog }}
           files: ${{ steps.get_artifact.outputs.ARTIFACT_PATH }}
-          # Mark as a "pre-release" if the build is from a feature branch
           prerelease: ${{ startsWith(github.ref, 'refs/heads/feature/') }}
