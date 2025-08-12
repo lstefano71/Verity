@@ -33,4 +33,7 @@ By default, if no `--include` or `--exclude` options are specified, all files in
 Users will be able to see active globs in the intro panel along with the pre-existing information such as the root, the version number and so on.
 
 ## Implementation suggestions
-If there are .NET libraries which already implement glob matching in a way that is compatible with the requirements, they should be used instead of reinventing the wheel. 
+- If there are .NET libraries which already implement glob matching in a way that is compatible with the requirements, they should be used instead of reinventing the wheel.
+- Write reusable code for the normalization of globs, so that the same code can be used in all commands.
+- Write reusable code for matching files against the globs, so that the same code can be used in all commands.
+- Possibly refactor the commands `add` and `create` to use `CliOptions`, so that the glob options can be passed in a consistent way.
