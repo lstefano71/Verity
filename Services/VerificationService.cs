@@ -91,7 +91,7 @@ public class VerificationService
             ProgressTask? progressTask = null;
             if (ctx is not null) {
               int padLen = 50;
-              var safeRelPath = PathUtils.AbbreviateAndPadPathForDisplay(job.Entry.RelativePath, padLen);
+              var safeRelPath = Utilities.AbbreviateAndPadPathForDisplay(job.Entry.RelativePath, padLen);
               progressTask = ctx.AddTask(safeRelPath, maxValue: job.FileSize > 0 ? job.FileSize : 1);
             }
             FileStarted?.Invoke(this, new FileStartedEventArgs(job.Entry, fullPath, job.FileSize, (object?)progressTask));

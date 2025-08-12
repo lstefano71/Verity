@@ -41,9 +41,9 @@ public class ResultsPresenter
     table.AddColumn("Expected Hash");
     table.AddColumn("Actual Hash");
 
-    string TruncateHash(string? hash) =>
+    static string TruncateHash(string? hash) =>
       string.IsNullOrEmpty(hash) ? "N/A" :
-      hash.Length > hashDisplayLen ? hash.Substring(0, hashDisplayLen) + "…" : hash;
+      hash.Length > hashDisplayLen ? hash[..hashDisplayLen] + "…" : hash;
 
     foreach (var result in summary.ProblematicResults.OrderBy(r => r.Status).ThenBy(r => r.Entry.RelativePath)) {
       var statusMarkup = result.Status switch {

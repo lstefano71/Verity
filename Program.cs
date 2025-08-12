@@ -5,7 +5,6 @@ using Humanizer;
 using Spectre.Console;
 
 using System.Diagnostics;
-using System.Reflection;
 
 public class Program
 {
@@ -66,11 +65,9 @@ public class Program
 
   public static async Task<int> RunVerification(CliOptions options, int threads, CancellationToken cancellationToken)
   {
-    var version = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
     var startTime = DateTime.Now;
-    var headerPanel = PathUtils.BuildHeaderPanel(
+    var headerPanel = Utilities.BuildHeaderPanel(
         "Verification Info",
-        version,
         startTime,
         options.ChecksumFile.Name,
         options.Algorithm,
@@ -151,14 +148,12 @@ public class Program
     int threads,
     CancellationToken cancellationToken)
   {
-    var version = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
     var startTime = DateTime.Now;
     var stopwatch = Stopwatch.StartNew();
     var rootPath = root?.FullName ?? manifestFile.DirectoryName!;
 
-    var headerPanel = PathUtils.BuildHeaderPanel(
+    var headerPanel = Utilities.BuildHeaderPanel(
         mode == ManifestOperationMode.Create ? "Manifest Creation Info" : "Manifest Add Info",
-        version,
         startTime,
         manifestFile.Name,
         algorithm,

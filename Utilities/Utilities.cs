@@ -1,6 +1,6 @@
 ﻿using Spectre.Console;
 
-public static class PathUtils
+public static class Utilities
 {
   // Abbreviate a path to a fixed length (default 40 chars) for display
   public static string AbbreviatePathForDisplay(string path, int maxLength = 40)
@@ -43,8 +43,13 @@ public static class PathUtils
   }
 
   // Helper to build a Spectre.Console Panel for header info
-  public static Panel BuildHeaderPanel(string title, string version, DateTime startTime, string manifestName, string algorithm, string root)
+  public static Panel BuildHeaderPanel(string title, DateTime startTime, string manifestName, string algorithm, string root)
   {
+    var entryAssembly = System.Reflection.Assembly.GetEntryAssembly();
+    var versionAttr = entryAssembly?.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+      .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+      .FirstOrDefault();
+    var version = versionAttr?.InformationalVersion ?? "0.0.0";
     var content =
       $"[bold]Version:[/] {version}\n[bold]Started:[/] {startTime:yyyy-MM-dd HH:mm:ss}\n" +
       $"[bold]Manifest:[/] {manifestName}\n" +

@@ -52,7 +52,7 @@ public class ManifestCreationService
                   ProgressTask? progressTask = null;
                   if (ctx is not null) {
                     int padLen = 50;
-                    var safeRelPath = PathUtils.AbbreviateAndPadPathForDisplay(relPath, padLen);
+                    var safeRelPath = Utilities.AbbreviateAndPadPathForDisplay(relPath, padLen);
                     progressTask = ctx.AddTask(safeRelPath, maxValue: fileSize > 0 ? fileSize : 1);
                   }
                   FileStarted?.Invoke(this, new ManifestFileStartedEventArgs(file, relPath, fileSize, (object?)progressTask));
