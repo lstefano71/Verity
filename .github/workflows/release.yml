@@ -1,6 +1,5 @@
 name: Create Release
 
-# This workflow runs on any push to the main branch or any branch starting with "feature/"
 on:
   push:
     branches:
@@ -8,71 +7,92 @@ on:
       - 'feature/**'
 
 jobs:
-  build-and-release:
-    # Use a Windows virtual machine to run the job
+  # --- JOB 1: Build the application on Windows ---
+  build:
+    name: Build on Windows
     runs-on: windows-latest
-
-    permissions:
-      contents: write # This is required to create releases and tags
+    # Define outputs that the next job can use
+    outputs:
+      artifact_name: ${{ steps.get_artifact.outputs.ARTIFACT_NAME }}
+      tag_name: ${{ steps.get_version.outputs.TAG_NAME }}
 
     steps:
-      # Step 1: Check out the repository's code
-      # fetch-depth: 0 is CRITICAL for Nerdbank.GitVersioning to get the full commit history.
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # Step 2: Set up the .NET SDK
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x' # Use an SDK version compatible with your project
+          dotnet-version: '9.0.x'
 
-      # Step 3: Install the NBGV command-line tool (as requested, not pre-installed)
       - name: Install Nerdbank.GitVersioning tool
         run: dotnet tool install -g nbgv
 
-      - name: restore dependencies
+      - name: Restore dependencies
         run: dotnet tool restore
 
-      # Step 4: Run the Cake build script to compile and package the application
-      # The script will create the zip file in the ./artifacts directory
       - name: Run Cake build and package
         run: dotnet cake --target=Package --configuration=Release
 
-      # Step 5: Get the version number for the release tag
       - name: Get Release Version
         id: get_version
         run: echo "TAG_NAME=v$(nbgv get-version -v NuGetPackageVersion)" >> $env:GITHUB_OUTPUT
         shell: pwsh
-
-      # Step 6: Find the path of the created zip file
-      # The name is dynamic, so we find it with a wildcard.
-      - name: Get Artifact Path
+      
+      # Use a more robust way to find the artifact and its name
+      - name: Get Artifact Details
         id: get_artifact
-        run: echo "ARTIFACT_PATH=$(Get-ChildItem ./artifacts/*.zip | Select-Object -First 1 -ExpandProperty FullName)" >> $env:GITHUB_OUTPUT
         shell: pwsh
-        
-      # Step 7: Generate the release notes from the commit messages
+        run: |
+          $artifact = Get-ChildItem ./artifacts/*.zip | Select-Object -First 1
+          echo "ARTIFACT_NAME=$($artifact.Name)" >> $env:GITHUB_OUTPUT
+
+      # Upload the packaged .zip file so the release job can download it
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: verity-package
+          path: ./artifacts/${{ steps.get_artifact.outputs.ARTIFACT_NAME }}
+
+
+  # --- JOB 2: Create the Release on Linux ---
+  release:
+    name: Create Release on Linux
+    # This job will only run after the 'build' job has succeeded
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to create releases
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Download the .zip file that the 'build' job uploaded
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: verity-package
+          
       - name: Generate Changelog
         id: changelog
         uses: orhun/git-cliff-action@v3
         with:
-          # Use the configuration file we created
           config: cliff.toml
-          # Get commits between the previous tag and the latest commit
-          args: --latest --strip header
-        # The 'changelog' output from this action is now clean and multiline                    
-
-        # Step 8: Create the GitHub Release and upload the artifact
+          # Use the tag from the build job to generate changelog from correct range
+          args: --tag ${{ needs.build.outputs.tag_name }} --strip header
+          
       - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.get_version.outputs.TAG_NAME }}
-          name: Release ${{ steps.get_version.outputs.TAG_NAME }}
-          # Feed the clean, multiline changelog from the previous step
+          tag_name: ${{ needs.build.outputs.tag_name }}
+          name: Release ${{ needs.build.outputs.tag_name }}
           body: ${{ steps.changelog.outputs.changelog }}
-          files: ${{ steps.get_artifact.outputs.ARTIFACT_PATH }}
+          # Attach the downloaded .zip file to the release
+          files: ${{ needs.build.outputs.artifact_name }}
           prerelease: ${{ startsWith(github.ref, 'refs/heads/feature/') }}
