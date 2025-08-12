@@ -54,7 +54,7 @@ public static class Utilities
       .FirstOrDefault();
     var version = versionAttr?.InformationalVersion ?? "0.0.0";
     var content =
-      $"[bold]Version:[/] {version}\n[bold]Started:[/] {startTime:yyyy-MM-dd HH:mm:ss}\n" +
+      $"[bold]Version:[/] {version}\n[bold]Started:[/] {startTime.ToUniversalTime():yyyy-MM-dd HH:mm:ssZ}\n" +
       $"[bold]Manifest:[/] {manifestName}\n" +
       $"[bold]Algorithm:[/] {algorithm}\n[bold]Root:[/] {root}\n";
     if (includeGlobs is { Length: > 0 } && (includeGlobs.Length != 1 || includeGlobs[0] != "*"))
