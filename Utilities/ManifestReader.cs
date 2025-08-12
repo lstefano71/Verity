@@ -11,16 +11,13 @@ public class ManifestReader(FileInfo manifestFile, DirectoryInfo? rootDirectory)
 
   public async Task<IReadOnlyList<ManifestEntry?>> ReadEntriesAsync(CancellationToken cancellationToken)
   {
-    var lines = await File.ReadAllLinesAsync(ManifestFile.FullName, cancellationToken);
-    var entries = lines
-        .Where(line => !string.IsNullOrWhiteSpace(line) && line.Contains('\t'))
-        .Select(line => {
-          var parts = line.Split('\t');
-          if (parts.Length < 2) return null;
-          return new ManifestEntry { Hash = parts[0], RelativePath = parts[1] };
-        })
-        .Where(e => e != null)
-        .ToList();
+    var entries = new List<ManifestEntry?>();
+    await foreach (var line in File.ReadLinesAsync(ManifestFile.FullName, cancellationToken)) {
+      if (string.IsNullOrWhiteSpace(line) || !line.Contains('\t')) continue;
+      var parts = line.Split('\t');
+      if (parts.Length < 2) continue;
+      entries.Add(new ManifestEntry { Hash = parts[0], RelativePath = parts[1] });
+    }
     return entries;
   }
 

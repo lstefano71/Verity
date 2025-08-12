@@ -39,141 +39,141 @@ public class VerificationService
       CliOptions options,
       CancellationToken cancellationToken,
       int parallelism = -1,
-      Spectre.Console.ProgressContext? ctx = null
+      ProgressContext? ctx = null
   )
   {
-      if (parallelism <= 0) parallelism = Environment.ProcessorCount;
-      var rootPath = options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName!;
-      var checksumFileTimestamp = options.ChecksumFile.LastWriteTimeUtc;
-      var lines = await File.ReadAllLinesAsync(options.ChecksumFile.FullName, cancellationToken);
-      var totalFiles = lines.Length;
-  
-      var jobChannel = Channel.CreateBounded<VerificationJob>(parallelism * 2);
-      var resultChannel = Channel.CreateUnbounded<VerificationResult>();
-  
-      var allListedFiles = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
-      long totalBytesRead = 0;
-  
-      var problematicResults = new List<VerificationResult>();
-      var unlistedFiles = new List<string>();
-  
-      var producer = Task.Run(async () => {
-          foreach (var line in lines) {
-              cancellationToken.ThrowIfCancellationRequested();
-              if (string.IsNullOrWhiteSpace(line)) continue;
-              var parts = line.Split('\t', 2);
-              if (parts.Length != 2) continue;
-  
-              var entry = new ChecksumEntry(parts[0].ToLowerInvariant(), parts[1]);
-              var fullPath = Path.GetFullPath(entry.RelativePath, rootPath);
-              allListedFiles.TryAdd(fullPath, 0);
-  
-              long fileSize = -1;
+    if (parallelism <= 0) parallelism = Environment.ProcessorCount;
+    var rootPath = options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName!;
+    var checksumFileTimestamp = options.ChecksumFile.LastWriteTimeUtc;
+    int totalFiles = 0;
+
+    var jobChannel = Channel.CreateBounded<VerificationJob>(parallelism * 2);
+    var resultChannel = Channel.CreateUnbounded<VerificationResult>();
+
+    var allListedFiles = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
+    long totalBytesRead = 0;
+
+    var problematicResults = new List<VerificationResult>();
+    var unlistedFiles = new List<string>();
+
+    var producer = Task.Run(async () => {
+      await foreach (var line in File.ReadLinesAsync(options.ChecksumFile.FullName, cancellationToken)) {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(line)) continue;
+        var parts = line.Split('\t', 2);
+        if (parts.Length != 2) continue;
+
+        var entry = new ChecksumEntry(parts[0].ToLowerInvariant(), parts[1]);
+        var fullPath = Path.GetFullPath(entry.RelativePath, rootPath);
+        allListedFiles.TryAdd(fullPath, 0);
+
+        long fileSize = -1;
+        try {
+          fileSize = new FileInfo(fullPath).Length;
+        } catch (Exception) {
+          // Will be handled by the consumer as a file not found error.
+        }
+
+        await jobChannel.Writer.WriteAsync(new VerificationJob(entry, fileSize), cancellationToken);
+        totalFiles++;
+      }
+      jobChannel.Writer.Complete();
+    }, cancellationToken);
+
+    var consumers = Enumerable.Range(0, parallelism)
+        .Select(_ => Task.Run(async () => {
+          using var hasher = IncrementalHash.CreateHash(new HashAlgorithmName(options.Algorithm));
+
+          await foreach (var job in jobChannel.Reader.ReadAllAsync(cancellationToken)) {
+            cancellationToken.ThrowIfCancellationRequested();
+            var fullPath = Path.Combine(rootPath, job.Entry.RelativePath);
+            VerificationResult result;
+            ProgressTask? progressTask = null;
+            if (ctx is not null) {
+              int padLen = 50;
+              var safeRelPath = PathUtils.AbbreviateAndPadPathForDisplay(job.Entry.RelativePath, padLen);
+              progressTask = ctx.AddTask(safeRelPath, maxValue: job.FileSize > 0 ? job.FileSize : 1);
+            }
+            FileStarted?.Invoke(this, new FileStartedEventArgs(job.Entry, fullPath, job.FileSize, (object?)progressTask));
+
+            if (job.FileSize < 0) {
+              result = new(job.Entry, ResultStatus.Error, Details: "File not found.", FullPath: fullPath);
+            } else {
               try {
-                  fileSize = new FileInfo(fullPath).Length;
-              } catch (Exception) {
-                  // Will be handled by the consumer as a file not found error.
+                int bufferSize = FileIOUtils.GetOptimalBufferSize(job.FileSize);
+                string actualHash;
+                long bytesReadTotal = 0;
+                using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous)) {
+                  byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
+                  try {
+                    int bytesRead;
+                    while ((bytesRead = await stream.ReadAsync(buffer, cancellationToken)) > 0) {
+                      hasher.AppendData(buffer, 0, bytesRead);
+                      bytesReadTotal += bytesRead;
+                      FileProgress?.Invoke(this, new FileProgressEventArgs(job.Entry, fullPath, bytesReadTotal, job.FileSize, (object?)progressTask));
+                    }
+                    actualHash = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
+                  } finally {
+                    ArrayPool<byte>.Shared.Return(buffer);
+                  }
+                }
+
+                Interlocked.Add(ref totalBytesRead, job.FileSize);
+
+                if (string.Equals(actualHash, job.Entry.ExpectedHash, StringComparison.OrdinalIgnoreCase)) {
+                  result = new(job.Entry, ResultStatus.Success, FullPath: fullPath);
+                } else if (new FileInfo(fullPath).LastWriteTimeUtc > checksumFileTimestamp) {
+                  result = new(job.Entry, ResultStatus.Warning, actualHash, "Checksum mismatch (file is newer).", fullPath);
+                } else {
+                  result = new(job.Entry, ResultStatus.Error, actualHash, "Checksum mismatch.", fullPath);
+                }
+              } catch (Exception ex) {
+                result = new(job.Entry, ResultStatus.Warning, Details: $"Cannot read file: {ex.Message}", FullPath: fullPath);
               }
-  
-              await jobChannel.Writer.WriteAsync(new VerificationJob(entry, fileSize), cancellationToken);
+            }
+            FileCompleted?.Invoke(this, new FileCompletedEventArgs(result, (object?)progressTask));
+            await resultChannel.Writer.WriteAsync(result, cancellationToken);
+
+            if (result.Status != ResultStatus.Success) {
+              problematicResults.Add(result);
+            }
           }
-          jobChannel.Writer.Complete();
-      }, cancellationToken);
-  
-      var consumers = Enumerable.Range(0, parallelism)
-          .Select(_ => Task.Run(async () => {
-              using var hasher = IncrementalHash.CreateHash(new HashAlgorithmName(options.Algorithm));
-  
-              await foreach (var job in jobChannel.Reader.ReadAllAsync(cancellationToken)) {
-                  cancellationToken.ThrowIfCancellationRequested();
-                  var fullPath = Path.Combine(rootPath, job.Entry.RelativePath);
-                  VerificationResult result;
-                  Spectre.Console.ProgressTask? progressTask = null;
-                  if (ctx is not null) {
-                      int padLen = 50;
-                      var safeRelPath = PathUtils.AbbreviateAndPadPathForDisplay(job.Entry.RelativePath, padLen);
-                      progressTask = ctx.AddTask(safeRelPath, maxValue: job.FileSize > 0 ? job.FileSize : 1);
-                  }
-                  FileStarted?.Invoke(this, new FileStartedEventArgs(job.Entry, fullPath, job.FileSize, (object?)progressTask));
-  
-                  if (job.FileSize < 0) {
-                      result = new(job.Entry, ResultStatus.Error, Details: "File not found.", FullPath: fullPath);
-                  } else {
-                      try {
-                          int bufferSize = FileIOUtils.GetOptimalBufferSize(job.FileSize);
-                          string actualHash;
-                          long bytesReadTotal = 0;
-                          using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous)) {
-                              byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
-                              try {
-                                  int bytesRead;
-                                  while ((bytesRead = await stream.ReadAsync(buffer, cancellationToken)) > 0) {
-                                      hasher.AppendData(buffer, 0, bytesRead);
-                                      bytesReadTotal += bytesRead;
-                                      FileProgress?.Invoke(this, new FileProgressEventArgs(job.Entry, fullPath, bytesReadTotal, job.FileSize, (object?)progressTask));
-                                  }
-                                  actualHash = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
-                              } finally {
-                                  ArrayPool<byte>.Shared.Return(buffer);
-                              }
-                          }
-  
-                          Interlocked.Add(ref totalBytesRead, job.FileSize);
-  
-                          if (string.Equals(actualHash, job.Entry.ExpectedHash, StringComparison.OrdinalIgnoreCase)) {
-                              result = new(job.Entry, ResultStatus.Success, FullPath: fullPath);
-                          } else if (new FileInfo(fullPath).LastWriteTimeUtc > checksumFileTimestamp) {
-                              result = new(job.Entry, ResultStatus.Warning, actualHash, "Checksum mismatch (file is newer).", fullPath);
-                          } else {
-                              result = new(job.Entry, ResultStatus.Error, actualHash, "Checksum mismatch.", fullPath);
-                          }
-                      } catch (Exception ex) {
-                          result = new(job.Entry, ResultStatus.Warning, Details: $"Cannot read file: {ex.Message}", FullPath: fullPath);
-                      }
-                  }
-                  FileCompleted?.Invoke(this, new FileCompletedEventArgs(result, (object?)progressTask));
-                  await resultChannel.Writer.WriteAsync(result, cancellationToken);
-  
-                  if (result.Status != ResultStatus.Success) {
-                      problematicResults.Add(result);
-                  }
-              }
-          }, cancellationToken)).ToArray();
-  
-      await Task.WhenAll(consumers);
-      resultChannel.Writer.Complete();
-  
-      int success = 0, warnings = 0, errors = 0;
-  
-      await foreach (var result in resultChannel.Reader.ReadAllAsync(cancellationToken)) {
-          cancellationToken.ThrowIfCancellationRequested();
-          switch (result.Status) {
-              case ResultStatus.Success: success++; break;
-              case ResultStatus.Warning: warnings++; break;
-              case ResultStatus.Error: errors++; break;
-          }
+        }, cancellationToken)).ToArray();
+
+    await Task.WhenAll(consumers);
+    resultChannel.Writer.Complete();
+
+    int success = 0, warnings = 0, errors = 0;
+
+    await foreach (var result in resultChannel.Reader.ReadAllAsync(cancellationToken)) {
+      cancellationToken.ThrowIfCancellationRequested();
+      switch (result.Status) {
+        case ResultStatus.Success: success++; break;
+        case ResultStatus.Warning: warnings++; break;
+        case ResultStatus.Error: errors++; break;
       }
-  
-      var allFilesInRoot = Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories);
-      foreach (var file in allFilesInRoot) {
-          cancellationToken.ThrowIfCancellationRequested();
-          if (!allListedFiles.ContainsKey(file) && !file.Equals(options.ChecksumFile.FullName, StringComparison.OrdinalIgnoreCase)) {
-              warnings++;
-              FileFoundNotInChecksumList?.Invoke(file);
-              unlistedFiles.Add(file);
-          }
+    }
+
+    var allFilesInRoot = Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories);
+    foreach (var file in allFilesInRoot) {
+      cancellationToken.ThrowIfCancellationRequested();
+      if (!allListedFiles.ContainsKey(file) && !file.Equals(options.ChecksumFile.FullName, StringComparison.OrdinalIgnoreCase)) {
+        warnings++;
+        FileFoundNotInChecksumList?.Invoke(file);
+        unlistedFiles.Add(file);
       }
-  
-      await producer;
-  
-      return new FinalSummary(
-          totalFiles,
-          success,
-          warnings,
-          errors,
-          totalBytesRead,
-          problematicResults,
-          unlistedFiles
-      );
+    }
+
+    await producer;
+
+    return new FinalSummary(
+        totalFiles,
+        success,
+        warnings,
+        errors,
+        totalBytesRead,
+        problematicResults,
+        unlistedFiles
+    );
   }
 }
