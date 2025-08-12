@@ -23,12 +23,18 @@ body = """
 {% for group, commits in commits | group_by(attribute="group") %}
     ### {{ group | upper_first }}
     {% for commit in commits %}
-        - {{ commit.message | split(pat="\n") | first | upper_first | trim }} ([{{ commit.id | truncate(length=7, end="") }}]({{ commit.id }}))\
-          {% if commit.footers %}\
-            {% for footer in commit.footers -%}
-                , {{ footer.token }}{{ footer.separator }}{{ footer.value }}\
-            {% endfor %}\
-          {% endif %}\
+        - <details>
+            <summary>{{ commit.message | split(pat="\n") | first | upper_first | trim }} ([{{ commit.id | truncate(length=7, end="") }}]({{ commit.id }}))\
+  {% if commit.footers %}\
+    {% for footer in commit.footers -%}
+        , {{ footer.token }}{{ footer.separator }}{{ footer.value }}\
+    {% endfor %}\
+  {% endif %}</summary>
+
+            ```
+            {{ commit.message | trim }}
+            ```
+          </details>
     {% endfor %}
 {% endfor %}\n
 """
@@ -40,13 +46,13 @@ footer = """
 trim = true
 
 [git]
+# This section remains unchanged from our last version
 # Parse commits according to the conventional commits specification.
 conventional_commits = true
 # Exclude commits that do not match the conventional commits specification.
 filter_unconventional = false
 # An array of regex based parsers for extracting data from the commit message.
 commit_parsers = [
-    # Keep your existing parsers for future "good" commits
     { message = "^feat", group = "Features" },
     { message = "^fix", group = "Bug Fixes" },
     { message = "^doc", group = "Documentation" },
@@ -54,19 +60,12 @@ commit_parsers = [
     { message = "^refactor", group = "Refactor" },
     { message = "^style", group = "Styling" },
     { message = "^test", group = "Testing" },
-    
-    # Keep the skips, they are still useful
     { message = "^chore\\(deps.*\\)", skip = true },
     { message = "^chore\\(pr\\)", skip = true },
     { message = "^chore\\(pull\\)", skip = true },
     { message = "^chore\\(release\\): prepare for", skip = true },
-    
-    # Keep other specific groups
     { message = "^chore|^ci", group = "Miscellaneous Tasks" },
     { body = ".*security", group = "Security" },
-
-    # --- THIS IS THE NEW LINE ---
-    # Catch-all for any other commit and put it in a "Changes" group
     { message = "^.*", group = "Changes" },
 ]
 # Exclude commits that are not matched by any commit parser.
