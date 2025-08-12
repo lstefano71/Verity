@@ -166,7 +166,7 @@ public class Program
     }
 
     string[] files = [];
-    List<string> filesToAdd = [];
+    List<string> newFiles = [];
     long totalBytes = 0;
     if (mode == ManifestOperationMode.Create) {
       await AnsiConsole.Status()
@@ -199,14 +199,15 @@ public class Program
             files = Directory.GetFiles(rootPath, "*", SearchOption.AllDirectories);
             await Task.Delay(100, cancellationToken);
           });
-      filesToAdd = [.. files
+      newFiles = files
         .Select(f => Path.GetRelativePath(rootPath, f))
-        .Where(rel => !listedFiles.Contains(rel))];
-      if (filesToAdd.Count == 0) {
+        .Where(rel => !listedFiles.Contains(rel))
+        .ToList();
+      if (newFiles.Count == 0) {
         AnsiConsole.MarkupLine("[yellow]No new files to add to manifest.[/]");
         return 0;
       }
-      totalBytes = filesToAdd.Select(f => new FileInfo(Path.Combine(rootPath, f)).Length).Sum();
+      totalBytes = newFiles.Select(f => new FileInfo(Path.Combine(rootPath, f)).Length).Sum();
     }
 
     long totalBytesRead = 0;
@@ -246,7 +247,7 @@ public class Program
           else
             exitCode = await manifestService.AddToManifestAsync(manifestFile,
               new DirectoryInfo(rootPath), algorithm,
-              filesToAdd, threads, cancellationToken, ctx);
+              newFiles, threads, cancellationToken, ctx);
           mainTask.StopTask();
         });
     stopwatch.Stop();
@@ -261,7 +262,7 @@ public class Program
     if (mode == ManifestOperationMode.Create) {
       summaryTable.AddRow("[green]Files[/]", $"{files.Length:N0}");
     } else {
-      summaryTable.AddRow("[green]Files Added[/]", $"{filesToAdd.Count:N0}");
+      summaryTable.AddRow("[green]Files Added[/]", $"{newFiles.Count:N0}");
     }
     summaryTable.AddRow("[cyan]Total Bytes[/]", $"{totalBytes.Bytes().Humanize()}");
     summaryTable.AddRow("[cyan]Total Time[/]", stopwatch.Elapsed.Humanize(2));
