@@ -64,25 +64,44 @@ jobs:
         with:
           name: verity-package
           
-      - name: Generate Changelog
-        id: generate_changelog
+      - name: Generate Changelog File
+        id: cliff
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
           # Use --latest to automatically find the previous tag and go to HEAD
           args: --latest
           
+      - name: Prepare Release Body
+        id: prep_body
+        shell: bash
+        run: |
+          # Read the content of the generated changelog file into a variable
+          CHANGELOG_CONTENT=$(cat ${{ steps.cliff.outputs.changelog }})
+
+          # Capture the previous tag, if it exists
+          PREVIOUS_TAG="${{ steps.cliff.outputs.previous_tag }}"
+          
+          # Start with the main changelog content
+          BODY="$CHANGELOG_CONTENT"
+
+          # Only add the "Full Changelog" link if a previous tag was found
+          if [[ -n "$PREVIOUS_TAG" ]]; then
+            # Append a newline and the link to the body
+            BODY+=$'\n\n**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREVIOUS_TAG}...${{ needs.build.outputs.tag_name }}'
+          fi
+
+          # Use a heredoc to safely pass the final multiline body to the output
+          echo 'body<<EOF' >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
+          echo 'EOF' >> $GITHUB_OUTPUT
+          
       - name: Create GitHub Release
-        id: create_release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.build.outputs.tag_name }}
           name: Release ${{ needs.build.outputs.tag_name }}
-          # Combine the changelog body with a dynamically generated "Full Changelog" link
-          body: |
-            ${{ steps.generate_changelog.outputs.changelog }}
-
-            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ steps.generate_changelog.outputs.previous_tag }}...${{ needs.build.outputs.tag_name }}
+          # Use the fully prepared body from the previous step
+          body: ${{ steps.prep_body.outputs.body }}
           files: ${{ needs.build.outputs.artifact_name }}
           prerelease: ${{ startsWith(github.ref, 'refs/heads/feature/') }}
-
