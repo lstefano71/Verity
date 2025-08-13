@@ -14,7 +14,6 @@ public class ResultsPresenter
         .OrderByDescending(g => g.Count)
         .ThenBy(g => g.Label);
 
-
     // take the top N groups and sum the rest into "Other"
 
     var topGroups = groups.Take(topN).ToList();

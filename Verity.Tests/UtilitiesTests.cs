@@ -109,8 +109,7 @@ public class UtilitiesTests
       "Exclude:"
     };
     var lastIndex = -1;
-    foreach (var label in expectedOrder)
-    {
+    foreach (var label in expectedOrder) {
       var idx = output.IndexOf(label);
       idx.Should().BeGreaterThan(lastIndex, $"Label '{label}' is out of order");
       lastIndex = idx;
