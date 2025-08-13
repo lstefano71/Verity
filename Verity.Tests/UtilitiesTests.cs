@@ -1,4 +1,3 @@
-using Xunit;
 using FluentAssertions;
 
 public class UtilitiesTests
@@ -14,36 +13,36 @@ public class UtilitiesTests
     var result = Utilities.AbbreviatePathForDisplay(path, maxLength);
     result.Should().StartWith(expectedStart[..Math.Min(result.Length, expectedStart.Length)]);
     result.Length.Should().BeLessThanOrEqualTo(maxLength);
-    }
+  }
 
-    [Fact]
-    public void AbbreviatePathForDisplay_EmptyOrNull_ReturnsInput()
-    {
-        Utilities.AbbreviatePathForDisplay("", 40).Should().Be("");
-        Utilities.AbbreviatePathForDisplay(null, 40).Should().Be(null);
-    }
+  [Fact]
+  public void AbbreviatePathForDisplay_EmptyOrNull_ReturnsInput()
+  {
+    Utilities.AbbreviatePathForDisplay("", 40).Should().Be("");
+    Utilities.AbbreviatePathForDisplay(null, 40).Should().Be(null);
+  }
 
-    [Fact]
-    public void AbbreviatePathForDisplay_MaxLengthEdge()
-    {
-        var path = new string('a', 100);
-        var result = Utilities.AbbreviatePathForDisplay(path, 10);
-        result.Length.Should().BeLessThanOrEqualTo(10);
-    }
+  [Fact]
+  public void AbbreviatePathForDisplay_MaxLengthEdge()
+  {
+    var path = new string('a', 100);
+    var result = Utilities.AbbreviatePathForDisplay(path, 10);
+    result.Length.Should().BeLessThanOrEqualTo(10);
+  }
 
-    [Fact]
-    public void AbbreviatePathForDisplay_UnicodePath()
-    {
-        var path = "C:\\файл\\длинноеимяфайла.txt";
-        var result = Utilities.AbbreviatePathForDisplay(path, 15);
-        result.Length.Should().BeLessThanOrEqualTo(15);
-    }
+  [Fact]
+  public void AbbreviatePathForDisplay_UnicodePath()
+  {
+    var path = "C:\\файл\\длинноеимяфайла.txt";
+    var result = Utilities.AbbreviatePathForDisplay(path, 15);
+    result.Length.Should().BeLessThanOrEqualTo(15);
+  }
 
-    [Fact]
-    public void AbbreviatePathForDisplay_WhitespacePath()
-    {
-        var path = "   ";
-        var result = Utilities.AbbreviatePathForDisplay(path, 2);
-        result.Should().Be("");
-    }
+  [Fact]
+  public void AbbreviatePathForDisplay_WhitespacePath()
+  {
+    var path = "   ";
+    var result = Utilities.AbbreviatePathForDisplay(path, 2);
+    result.Should().Be("");
+  }
 }

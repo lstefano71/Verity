@@ -1,3 +1,5 @@
+namespace Verity.Utilities;
+
 public static class FileIOUtils
 {
   public static int GetOptimalBufferSize(long fileSize)

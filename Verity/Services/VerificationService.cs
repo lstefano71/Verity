@@ -5,6 +5,8 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Threading.Channels;
 
+using Verity.Utilities;
+
 public class FileStartedEventArgs(ChecksumEntry entry, string fullPath, long fileSize, object? bag) : EventArgs
 {
   public ChecksumEntry Entry { get; } = entry;
@@ -179,12 +181,14 @@ public class VerificationService
 }
 public static class StatusClassifier
 {
-    public static ResultStatus Classify(string expectedHash, string actualHash, DateTime fileWriteTime, DateTime manifestWriteTime)
-    {
-        if (string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase))
-            return ResultStatus.Success;
-        if (fileWriteTime > manifestWriteTime)
-            return ResultStatus.Warning;
-        return ResultStatus.Error;
-    }
+  public static ResultStatus Classify(string? expectedHash, string? actualHash, DateTime fileWriteTime, DateTime manifestWriteTime)
+  {
+    if (string.IsNullOrWhiteSpace(expectedHash) || string.IsNullOrWhiteSpace(actualHash))
+      return ResultStatus.Error;
+    if (string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase))
+      return ResultStatus.Success;
+    if (fileWriteTime > manifestWriteTime)
+      return ResultStatus.Warning;
+    return ResultStatus.Error;
+  }
 }

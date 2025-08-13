@@ -13,10 +13,9 @@ public static class Utilities
     // Detect drive letter and colon (Windows style)
     string drive = "";
     string rest = path;
-    if (path.Length > 2 && path[1] == ':' && (path[2] == '\\' || path[2] == '/'))
-    {
-        drive = path[..3]; // e.g. "C:\"
-        rest = path[3..];
+    if (path.Length > 2 && path[1] == ':' && (path[2] == '\\' || path[2] == '/')) {
+      drive = path[..3]; // e.g. "C:\"
+      rest = path[3..];
     }
 
     var dir = Path.GetDirectoryName(rest) ?? "";
@@ -24,13 +23,12 @@ public static class Utilities
     if (string.IsNullOrWhiteSpace(file)) return "";
 
     // Always produce C:\...\file.txt style for long paths
-    if (dir.Length > 0 && (drive + dir + Path.DirectorySeparatorChar + file).Length > maxLength)
-    {
-        // Show drive, ellipsis, then filename
-        string abbreviated = $"{drive}...{Path.DirectorySeparatorChar}{file}";
-        if (abbreviated.Length > maxLength)
-            abbreviated = abbreviated[..maxLength];
-        return abbreviated;
+    if (dir.Length > 0 && (drive + dir + Path.DirectorySeparatorChar + file).Length > maxLength) {
+      // Show drive, ellipsis, then filename
+      string abbreviated = $"{drive}...{Path.DirectorySeparatorChar}{file}";
+      if (abbreviated.Length > maxLength)
+        abbreviated = abbreviated[..maxLength];
+      return abbreviated;
     }
 
     string result = drive + (dir.Length > 0 ? dir + Path.DirectorySeparatorChar + file : file);

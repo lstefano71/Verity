@@ -36,15 +36,15 @@ public class ManifestReader(FileInfo manifestFile, DirectoryInfo? rootDirectory)
     }).Sum();
     return totalBytes;
   }
-public static ManifestEntry? ParseLine(string line)
-{
+  public static ManifestEntry? ParseLine(string line)
+  {
     if (string.IsNullOrWhiteSpace(line) || !line.Contains('\t'))
-        return null;
+      return null;
     var parts = line.Split('\t');
     if (parts.Length < 2)
-        return null;
+      return null;
     if (string.IsNullOrWhiteSpace(parts[0]) || string.IsNullOrWhiteSpace(parts[1]))
-        return null;
+      return null;
     return new ManifestEntry { Hash = parts[0], RelativePath = parts[1] };
-}
+  }
 }

@@ -2,6 +2,8 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 
+using Verity.Utilities;
+
 public class ManifestFileStartedEventArgs(string filePath, string relativePath, long fileSize, object? bag) : EventArgs
 {
   public string FilePath { get; } = filePath;
@@ -30,9 +32,9 @@ public class ManifestFileCompletedEventArgs(string filePath, string relativePath
 
 public class ManifestCreationService
 {
-  public event EventHandler<ManifestFileStartedEventArgs> FileStarted;
-  public event EventHandler<ManifestFileProgressEventArgs> FileProgress;
-  public event EventHandler<ManifestFileCompletedEventArgs> FileCompleted;
+  public event EventHandler<ManifestFileStartedEventArgs>? FileStarted;
+  public event EventHandler<ManifestFileProgressEventArgs>? FileProgress;
+  public event EventHandler<ManifestFileCompletedEventArgs>? FileCompleted;
 
   private async Task<FinalSummary> ProcessManifestFilesAsync(ManifestOperationMode mode,
     FileInfo manifestFile, DirectoryInfo root,
