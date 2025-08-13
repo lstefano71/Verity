@@ -16,7 +16,7 @@ var projectName = "Verity"; // Project base name for artifact
 ///////////////////////////////////////////////////////////////////////////////
 
 // FIX: Reverted to using .Combine() which is the correct method for chaining path segments.
-var publishDir = Directory("./bin")
+var publishDir = Directory("./Verity/bin")
    + Directory(configuration)
    + Directory("net9.0")
    + Directory("win-x64")
@@ -63,8 +63,8 @@ Teardown(ctx =>
 Task("Clean")
     .Does(() =>
 {
-    CleanDirectory("./bin");
-    CleanDirectory("./obj");
+    CleanDirectory("./Verity/bin");
+    CleanDirectory("./Verity/obj");
     CleanDirectory(artifactsDir);
     Information("Cleaned build and artifact directories.");
 });
@@ -72,7 +72,7 @@ Task("Clean")
 Task("Build")
     .IsDependentOn("Clean")
     .Does(() => {
-    DotNetBuild("./Verity.csproj", new DotNetBuildSettings {
+    DotNetBuild("./Verity/Verity.csproj", new DotNetBuildSettings {
         Configuration = configuration
     });
     Information("Project compiled in {0} mode.", configuration);
@@ -81,7 +81,7 @@ Task("Build")
 Task("AOT-Compile")
     .IsDependentOn("Build")
     .Does(() => {
-    DotNetPublish("./Verity.csproj", new DotNetPublishSettings {
+    DotNetPublish("./Verity/Verity.csproj", new DotNetPublishSettings {
         Configuration = configuration,
         OutputDirectory = publishDir,
         ArgumentCustomization = args => args
@@ -140,7 +140,8 @@ Task("Package")
 
 Task("Run-Tests")
 .Does(() => {
-   var verityExe = System.IO.Path.Combine(Directory("./bin") + Directory(configuration) + Directory("net9.0"), "Verity.exe");
+   var verityExe = System.IO.Path.Combine(Directory("./Verity/bin")
+   + Directory(configuration) + Directory("net9.0"), "Verity.exe");
    var algorithms = new[] {
       new { Name = "SHA256", Ext = ".sha256" },
       new { Name = "MD5", Ext = ".md5" },
