@@ -1,7 +1,3 @@
-using System;
-using System.IO;
-using Verity.Utilities;
-using Xunit;
 using FluentAssertions;
 
 public class GlobUtilsTests : IDisposable
@@ -24,8 +20,7 @@ public class GlobUtilsTests : IDisposable
   private string[] CreateFiles(params string[] relativePaths)
   {
     var fullPaths = relativePaths.Select(p => Path.Combine(tempDir, p)).ToArray();
-    foreach (var path in fullPaths)
-    {
+    foreach (var path in fullPaths) {
       var dir = Path.GetDirectoryName(path);
       if (!Directory.Exists(dir)) Directory.CreateDirectory(dir!);
       File.WriteAllText(path, "test");

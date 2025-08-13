@@ -2,7 +2,7 @@
 
 public static class Utilities
 {
-  public static string AbbreviatePathForDisplay(string path, int maxLength = 40)
+  public static string? AbbreviatePathForDisplay(string? path, int maxLength = 40)
   {
     path = path?.Trim();
     if (string.IsNullOrWhiteSpace(path)) return path;
@@ -43,7 +43,7 @@ public static class Utilities
     var abbreviated = AbbreviatePathForDisplay(path, padLen);
     int padCount = padLen - abbreviated.Length;
     if (padCount > 0) abbreviated = new string('▪', padCount) + abbreviated;
-    return Spectre.Console.Markup.Escape(abbreviated);
+    return Markup.Escape(abbreviated);
   }
 
   // Helper to build a Spectre.Console Panel for header info

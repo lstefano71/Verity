@@ -1,9 +1,4 @@
 using FluentAssertions;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
-using Xunit;
-using System;
 
 public class ManifestReaderTests : IDisposable
 {
