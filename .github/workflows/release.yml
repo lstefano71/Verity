@@ -29,6 +29,8 @@ jobs:
         run: dotnet tool restore
       - name: Run Cake build and package
         run: dotnet cake --target=Package --configuration=Release
+      - name: Run Unit & Integration Tests
+        run: dotnet test --configuration Release --no-build --verbosity normal
       - name: Get Release Version
         id: get_version
         run: echo "TAG_NAME=v$(nbgv get-version -v NuGetPackageVersion)" >> $env:GITHUB_OUTPUT

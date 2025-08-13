@@ -177,3 +177,14 @@ public class VerificationService
     );
   }
 }
+public static class StatusClassifier
+{
+    public static ResultStatus Classify(string expectedHash, string actualHash, DateTime fileWriteTime, DateTime manifestWriteTime)
+    {
+        if (string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase))
+            return ResultStatus.Success;
+        if (fileWriteTime > manifestWriteTime)
+            return ResultStatus.Warning;
+        return ResultStatus.Error;
+    }
+}
