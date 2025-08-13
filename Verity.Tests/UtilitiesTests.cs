@@ -28,7 +28,7 @@ public class UtilitiesTests
     {
         var path = new string('a', 100);
         var result = Utilities.AbbreviatePathForDisplay(path, 10);
-        result.Length.Should().BeLessOrEqualTo(10);
+        result.Length.Should().BeLessThanOrEqualTo(10);
     }
 
     [Fact]
@@ -36,7 +36,7 @@ public class UtilitiesTests
     {
         var path = "C:\\файл\\длинноеимяфайла.txt";
         var result = Utilities.AbbreviatePathForDisplay(path, 15);
-        result.Length.Should().BeLessOrEqualTo(15);
+        result.Length.Should().BeLessThanOrEqualTo(15);
     }
 
     [Fact]
