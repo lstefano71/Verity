@@ -1,7 +1,7 @@
 public abstract class CommandTestBase : IAsyncLifetime
 {
-  protected readonly VerityTestFixture fixture;
-  public CommandTestBase(VerityTestFixture fixture)
+  protected readonly CommonTestFixture fixture;
+  public CommandTestBase(CommonTestFixture fixture)
   {
     this.fixture = fixture;
   }

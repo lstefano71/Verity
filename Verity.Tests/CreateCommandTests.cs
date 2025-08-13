@@ -2,16 +2,9 @@ using FluentAssertions;
 
 using System.Security.Cryptography;
 
-public class CreateCommandTests : CommandTestBase, IClassFixture<VerityTestFixture>
+public class CreateCommandTests : CommandTestBase, IClassFixture<CommonTestFixture>
 {
-  public CreateCommandTests(VerityTestFixture fixture) : base(fixture) { }
-
-  private string Md5(string input)
-  {
-    using var md5 = MD5.Create();
-    var hash = md5.ComputeHash(System.Text.Encoding.UTF8.GetBytes(input));
-    return string.Concat(hash.Select(b => b.ToString("x2")));
-  }
+  public CreateCommandTests(CommonTestFixture fixture) : base(fixture) { }
 
   [Fact]
   public async Task Create_BasicCreation()
@@ -26,7 +19,7 @@ public class CreateCommandTests : CommandTestBase, IClassFixture<VerityTestFixtu
     File.Exists(manifestPath).Should().BeTrue();
     var manifestContent = File.ReadAllText(manifestPath);
     manifestContent.Should().Contain("a.txt");
-    manifestContent.Should().Contain(Md5("hello"));
+    manifestContent.Should().Contain(fixture.Md5("hello"));
   }
 
   [Fact]

@@ -2,16 +2,9 @@ using FluentAssertions;
 
 using System.Security.Cryptography;
 
-public class VerifyCommandTests : CommandTestBase, IClassFixture<VerityTestFixture>
+public class VerifyCommandTests : CommandTestBase, IClassFixture<CommonTestFixture>
 {
-  public VerifyCommandTests(VerityTestFixture fixture) : base(fixture) { }
-
-  private string Md5(string input)
-  {
-    using var md5 = MD5.Create();
-    var hash = md5.ComputeHash(System.Text.Encoding.UTF8.GetBytes(input));
-    return string.Concat(hash.Select(b => b.ToString("x2")));
-  }
+  public VerifyCommandTests(CommonTestFixture fixture) : base(fixture) { }
 
   [Fact]
   public async Task Verify_Success()
@@ -19,7 +12,7 @@ public class VerifyCommandTests : CommandTestBase, IClassFixture<VerityTestFixtu
     var manifestPath = fixture.GetManifestPath("md5");
     File.Exists(manifestPath).Should().BeFalse();
     var file = fixture.CreateTestFile("a.txt", "hello");
-    var hash = Md5("hello");
+    var hash = fixture.Md5("hello");
     fixture.CreateManifest("md5", (hash, "a.txt"));
     var reportPath = fixture.GetFullPath("report.tsv");
     File.Exists(reportPath).Should().BeFalse();
@@ -38,7 +31,7 @@ public class VerifyCommandTests : CommandTestBase, IClassFixture<VerityTestFixtu
   [Fact]
   public async Task Verify_FileNotFound()
   {
-    var hash = Md5("hello");
+    var hash = fixture.Md5("hello");
     fixture.CreateManifest("md5", (hash, "notfound.txt"));
     var manifestPath = fixture.GetManifestPath("md5");
     var reportPath = fixture.GetFullPath("report.tsv");
@@ -87,7 +80,7 @@ public class VerifyCommandTests : CommandTestBase, IClassFixture<VerityTestFixtu
   public async Task Verify_UnlistedFile_Warning()
   {
     fixture.CreateTestFile("a.txt", "hello");
-    fixture.CreateManifest("md5", (Md5("hello"), "a.txt"));
+    fixture.CreateManifest("md5", (fixture.Md5("hello"), "a.txt"));
     fixture.CreateTestFile("extra.txt", "extra");
     var manifestPath = fixture.GetManifestPath("md5");
     var reportPath = fixture.GetFullPath("report.tsv");

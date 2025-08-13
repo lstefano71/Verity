@@ -7,10 +7,10 @@ public class ProcessResult
   public string StdErr { get; set; } = "";
 }
 
-public class VerityTestFixture : IAsyncLifetime, IDisposable
+public class CommonTestFixture : IAsyncLifetime, IDisposable
 {
   public string TempDir { get; private set; } = "";
-  public VerityTestFixture()
+  public CommonTestFixture()
   {
     TempDir = Path.Combine(Path.GetTempPath(), "VerityTest_" + Guid.NewGuid());
     Directory.CreateDirectory(TempDir);
@@ -111,5 +111,19 @@ public class VerityTestFixture : IAsyncLifetime, IDisposable
     if (Directory.Exists(TempDir))
       Directory.Delete(TempDir, true);
     GC.SuppressFinalize(this);
+  }
+
+  public string Md5(string input)
+  {
+    using var md5 = System.Security.Cryptography.MD5.Create();
+    var hash = md5.ComputeHash(System.Text.Encoding.UTF8.GetBytes(input));
+    return string.Concat(hash.Select(b => b.ToString("x2")));
+  }
+
+  public string Sha256(string input)
+  {
+    using var sha256 = System.Security.Cryptography.SHA256.Create();
+    var hash = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(input));
+    return string.Concat(hash.Select(b => b.ToString("x2")));
   }
 }
