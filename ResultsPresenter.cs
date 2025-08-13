@@ -6,6 +6,27 @@ using System.Text;
 
 public class ResultsPresenter
 {
+  private static IEnumerable<(string Label, int Count)> GetTopDetailsGroups(IEnumerable<VerificationResult> results, string color, int topN = 3)
+  {
+    var groups = results
+        .GroupBy(r => r.Details ?? "(no details)")
+        .Select(g => new { Label = g.Key, Count = g.Count() })
+        .OrderByDescending(g => g.Count)
+        .ThenBy(g => g.Label);
+
+
+    // take the top N groups and sum the rest into "Other"
+
+    var topGroups = groups.Take(topN).ToList();
+      var otherCount = groups.Skip(topN).Sum(g => g.Count);
+      if (otherCount > 0)
+      {
+          topGroups.Add(new { Label = "Other", Count = otherCount });
+      }
+      // Format with color
+      return topGroups.Select(g => ($"  [{color}]- {g.Label}[/]", g.Count));
+  }
+
   public static void RenderSummaryTable(FinalSummary summary, TimeSpan elapsed)
   {
     var summaryTable = new Table()
@@ -14,9 +35,28 @@ public class ResultsPresenter
         .AddColumn(new TableColumn("Label").LeftAligned())
         .AddColumn(new TableColumn("Value").LeftAligned());
 
+    // Success total
     summaryTable.AddRow("[green]Success[/]", $"{summary.SuccessCount:N0}");
+    // No breakdown for Success, as individual results are not stored
+
+    // Warnings total
     summaryTable.AddRow("[yellow]Warnings[/]", $"{summary.WarningCount:N0}");
+    // Top 3 Details for Warnings, rest as Other
+    foreach (var (label, count) in GetTopDetailsGroups(
+        summary.ProblematicResults.Where(r => r.Status == ResultStatus.Warning), "yellow"))
+    {
+        summaryTable.AddRow(label, $"{count:N0}");
+    }
+
+    // Errors total
     summaryTable.AddRow("[red]Errors[/]", $"{summary.ErrorCount:N0}");
+    // Top 3 Details for Errors, rest as Other
+    foreach (var (label, count) in GetTopDetailsGroups(
+        summary.ProblematicResults.Where(r => r.Status == ResultStatus.Error), "red"))
+    {
+        summaryTable.AddRow(label, $"{count:N0}");
+    }
+
     summaryTable.AddEmptyRow();
     summaryTable.AddRow("[blue]Total Files[/]", $"{summary.TotalFiles:N0}");
     summaryTable.AddRow("[blue]Total Bytes Hashed[/]", summary.TotalBytesRead.Bytes().Humanize());
