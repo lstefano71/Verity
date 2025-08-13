@@ -58,4 +58,133 @@ public class GlobUtilsTests
     var result = GlobUtils.IsMatch("file.txt", ["[invalid"], null);
     result.Should().BeFalse();
   }
+
+  [Fact]
+  public void FilterFiles_IncludeOnly_ReturnsMatchingFiles()
+  {
+    var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+    Directory.CreateDirectory(tempDir);
+    try {
+      var subdir = Path.Combine(tempDir, "subdir");
+      Directory.CreateDirectory(subdir);
+      var files = new[]
+      {
+        Path.Combine(tempDir, "a.txt"),
+        Path.Combine(tempDir, "b.md"),
+        Path.Combine(tempDir, "c.log"),
+        Path.Combine(subdir, "d.txt"),
+      };
+      foreach (var file in files)
+        File.WriteAllText(file, "test");
+      var result = GlobUtils.FilterFiles(files, tempDir, new[] { "*.txt", "subdir/*.txt" }, null);
+      result.Should().BeEquivalentTo(["a.txt", Path.Combine("subdir", "d.txt")]);
+    } finally {
+      if (Directory.Exists(tempDir))
+        Directory.Delete(tempDir, true);
+    }
+  }
+
+  [Fact]
+  public void FilterFiles_ExcludeOnly_RemovesExcludedFiles()
+  {
+    var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+    Directory.CreateDirectory(tempDir);
+    try {
+      var files = new[]
+      {
+        Path.Combine(tempDir, "a.txt"),
+        Path.Combine(tempDir, "b.md"),
+        Path.Combine(tempDir, "c.log"),
+      };
+      // Create the files physically
+      foreach (var file in files)
+        File.WriteAllText(file, "test");
+
+      var result = GlobUtils.FilterFiles(files, tempDir, null, new[] { "*.md", "*.log" });
+      result.Should().BeEquivalentTo(["a.txt"]);
+    } finally {
+      if (Directory.Exists(tempDir))
+        Directory.Delete(tempDir, true);
+    }
+  }
+
+  [Fact]
+  public void FilterFiles_IncludeAndExclude_FiltersCorrectly()
+  {
+    var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+    Directory.CreateDirectory(tempDir);
+    try {
+      var files = new[]
+      {
+        Path.Combine(tempDir, "a.txt"),
+        Path.Combine(tempDir, "b.md"),
+        Path.Combine(tempDir, "c.log"),
+        Path.Combine(tempDir, "d.txt"),
+      };
+      foreach (var file in files)
+        File.WriteAllText(file, "test");
+      var result = GlobUtils.FilterFiles(files, tempDir, new[] { "*.txt", "*.md" }, new[] { "a.txt" });
+      result.Should().BeEquivalentTo(["b.md", "d.txt"]);
+    } finally {
+      if (Directory.Exists(tempDir))
+        Directory.Delete(tempDir, true);
+    }
+  }
+
+  [Fact]
+  public void FilterFiles_NoGlobs_ReturnsAllFiles()
+  {
+    var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+    Directory.CreateDirectory(tempDir);
+    try {
+      var files = new[]
+      {
+        Path.Combine(tempDir, "a.txt"),
+        Path.Combine(tempDir, "b.md"),
+      };
+      foreach (var file in files)
+        File.WriteAllText(file, "test");
+      var result = GlobUtils.FilterFiles(files, tempDir, null, null);
+      result.Should().BeEquivalentTo(["a.txt", "b.md"]);
+    } finally {
+      if (Directory.Exists(tempDir))
+        Directory.Delete(tempDir, true);
+    }
+  }
+
+  [Fact]
+  public void FilterFiles_NoFiles_ReturnsEmpty()
+  {
+    var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+    Directory.CreateDirectory(tempDir);
+    try {
+      var files = new string[] { };
+      var result = GlobUtils.FilterFiles(files, tempDir, new[] { "*.txt" }, null);
+      result.Should().BeEmpty();
+    } finally {
+      if (Directory.Exists(tempDir))
+        Directory.Delete(tempDir, true);
+    }
+  }
+
+  [Fact]
+  public void FilterFiles_AllFilesExcluded_ReturnsEmpty()
+  {
+    var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+    Directory.CreateDirectory(tempDir);
+    try {
+      var files = new[]
+      {
+        Path.Combine(tempDir, "a.txt"),
+        Path.Combine(tempDir, "b.md"),
+      };
+      foreach (var file in files)
+        File.WriteAllText(file, "test");
+      var result = GlobUtils.FilterFiles(files, tempDir, null, new[] { "**/*" });
+      result.Should().BeEmpty();
+    } finally {
+      if (Directory.Exists(tempDir))
+        Directory.Delete(tempDir, true);
+    }
+  }
 }
