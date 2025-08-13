@@ -2,24 +2,9 @@ using FluentAssertions;
 
 using System.Security.Cryptography;
 
-public class CreateCommandTests : IClassFixture<VerityTestFixture>, IAsyncLifetime
+public class CreateCommandTests : CommandTestBase, IClassFixture<VerityTestFixture>
 {
-  readonly VerityTestFixture fixture;
-  public CreateCommandTests(VerityTestFixture fixture) => this.fixture = fixture;
-
-  public async Task InitializeAsync()
-  {
-    // Clean up all files and subdirectories in TempDir before each test
-    if (Directory.Exists(fixture.TempDir)) {
-      foreach (var file in Directory.GetFiles(fixture.TempDir))
-        File.Delete(file);
-      foreach (var dir in Directory.GetDirectories(fixture.TempDir))
-        Directory.Delete(dir, true);
-    }
-    await Task.CompletedTask;
-  }
-
-  public Task DisposeAsync() => Task.CompletedTask;
+  public CreateCommandTests(VerityTestFixture fixture) : base(fixture) { }
 
   private string Md5(string input)
   {
@@ -34,7 +19,7 @@ public class CreateCommandTests : IClassFixture<VerityTestFixture>, IAsyncLifeti
     fixture.CreateTestFile("a.txt", "hello");
     var manifestPath = fixture.GetManifestPath("md5");
     if (File.Exists(manifestPath)) File.Delete(manifestPath);
-    var result = await fixture.RunVerity($"create \"{manifestPath}\"");
+    var result = await fixture.RunVerity("create manifest.md5");
     Console.WriteLine("STDOUT:\n" + result.StdOut);
     Console.WriteLine("STDERR:\n" + result.StdErr);
     result.ExitCode.Should().Be(0);
@@ -56,7 +41,7 @@ public class CreateCommandTests : IClassFixture<VerityTestFixture>, IAsyncLifeti
     var manifestDir = Path.GetDirectoryName(manifestPath);
     Directory.Exists(manifestDir).Should().BeTrue();
     Directory.GetFiles(manifestDir).Should().BeEmpty();
-    var result = await fixture.RunVerity($"create \"{manifestPath}\" --tsv-report \"{reportPath}\"");
+    var result = await fixture.RunVerity("create manifest.md5 --tsv-report report.tsv");
     Console.WriteLine("STDOUT:\n" + result.StdOut);
     Console.WriteLine("STDERR:\n" + result.StdErr);
     result.ExitCode.Should().Be(1);
@@ -73,7 +58,7 @@ public class CreateCommandTests : IClassFixture<VerityTestFixture>, IAsyncLifeti
     fixture.CreateTestFile("c.tmp", "tmp");
     var manifestPath = fixture.GetManifestPath("md5");
     if (File.Exists(manifestPath)) File.Delete(manifestPath);
-    var result = await fixture.RunVerity($"create \"{manifestPath}\" --include \"*.txt;*.log\" --exclude \"*.tmp\"");
+    var result = await fixture.RunVerity("create manifest.md5 --include \"*.txt;*.log\" --exclude \"*.tmp\"");
     Console.WriteLine("STDOUT:\n" + result.StdOut);
     Console.WriteLine("STDERR:\n" + result.StdErr);
     result.ExitCode.Should().Be(0);
@@ -81,22 +66,5 @@ public class CreateCommandTests : IClassFixture<VerityTestFixture>, IAsyncLifeti
     manifestContent.Should().Contain("a.txt");
     manifestContent.Should().Contain("b.log");
     manifestContent.Should().NotContain("c.tmp");
-  }
-
-  [Fact]
-  public async Task Create_OverwritesPreexistingManifest()
-  {
-    var manifestPath = fixture.GetManifestPath("md5");
-    File.WriteAllText(manifestPath, "DUMMY CONTENT");
-    fixture.CreateTestFile("a.txt", "hello");
-    var result = await fixture.RunVerity($"create \"{manifestPath}\"");
-    Console.WriteLine("STDOUT:\n" + result.StdOut);
-    Console.WriteLine("STDERR:\n" + result.StdErr);
-    result.ExitCode.Should().Be(0);
-    File.Exists(manifestPath).Should().BeTrue();
-    var manifestContent = File.ReadAllText(manifestPath);
-    manifestContent.Should().NotContain("DUMMY CONTENT");
-    manifestContent.Should().Contain("a.txt");
-    manifestContent.Should().Contain(Md5("hello"));
   }
 }

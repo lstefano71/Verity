@@ -106,6 +106,7 @@ public class ResultsPresenter
 
   public static async Task WriteErrorReportAsync(FinalSummary summary, FileInfo? outputFile = null)
   {
+
     var errorReport = new StringBuilder();
     errorReport.AppendLine("#Status\tFile\tDetails\tExpectedHash\tActualHash");
 

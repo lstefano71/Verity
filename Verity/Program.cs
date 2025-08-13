@@ -32,7 +32,7 @@ public class Program
   public async Task<int> Verify(
       [Argument] string checksumFile,
       string? root = null,
-      string algorithm = "SHA256",
+      string? algorithm = null,
       int? threads = null,
       string? tsvReport = null,
       bool showTable = false,
@@ -107,7 +107,7 @@ public class Program
   public async Task<int> Add(
       [Argument] string manifestPath,
       string? root = null,
-      string algorithm = "SHA256",
+      string? algorithm = null,
       int? threads = null,
       string? include = null,
       string? exclude = null,
