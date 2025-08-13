@@ -156,10 +156,20 @@ public class Program
           var entries = await reader.ReadEntriesAsync(cancellationToken);
           manifestEntries = [.. entries.Where(e => e != null && GlobUtils.IsMatch(e.RelativePath!, options.IncludeGlobs, options.ExcludeGlobs))];
           totalFiles = manifestEntries.Count;
-          totalBytes = manifestEntries.Select(e => {
-            var fullPath = options.RootDirectory != null ? Path.Combine(options.RootDirectory.FullName, e.RelativePath!) : Path.Combine(options.ChecksumFile.DirectoryName!, e.RelativePath!);
-            return File.Exists(fullPath) ? new FileInfo(fullPath).Length : 0L;
-          }).Sum();
+
+          // Efficiently enumerate files and tally sizes
+          var rootDir = options.RootDirectory ?? new DirectoryInfo(options.ChecksumFile.DirectoryName!);
+          var manifestRelPaths = new HashSet<string>(manifestEntries.Select(e => e.RelativePath!), StringComparer.OrdinalIgnoreCase);
+          foreach (var fsi in rootDir.EnumerateFileSystemInfos("*", SearchOption.AllDirectories)) {
+            if (fsi is FileInfo fi) {
+              var relPath = Path.GetRelativePath(rootDir.FullName, fi.FullName);
+              ctx.Status = $"[green]Reading manifest: {options.ChecksumFile.FullName}[/] [grey]({relPath})[/]...";
+              if (manifestRelPaths.Contains(relPath)) {
+                totalBytes += fi.Length;
+              }
+//              await Task.Delay(10, cancellationToken); 
+            }
+          }
           await Task.Delay(100, cancellationToken); // Ensure spinner is visible
         });
 
