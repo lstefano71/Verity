@@ -34,7 +34,9 @@ public class ManifestCreationService
   public event EventHandler<ManifestFileProgressEventArgs> FileProgress;
   public event EventHandler<ManifestFileCompletedEventArgs> FileCompleted;
 
-  private async Task<FinalSummary> ProcessManifestFilesAsync(ManifestOperationMode mode, FileInfo manifestFile, DirectoryInfo root, string algorithm, IEnumerable<string> files, int threads, CancellationToken cancellationToken)
+  private async Task<FinalSummary> ProcessManifestFilesAsync(ManifestOperationMode mode, 
+    FileInfo manifestFile, DirectoryInfo root, 
+    string algorithm, IEnumerable<string> files, int threads, CancellationToken cancellationToken)
   {
     if (files == null || !files.Any())
       return new FinalSummary(0, 0, 0, 0, 0, [], []);
@@ -136,8 +138,10 @@ public class ManifestCreationService
     return await ProcessManifestFilesAsync(ManifestOperationMode.Create, outputManifest, root, algorithm, fullPaths, threads, cancellationToken);
   }
 
-  public async Task<FinalSummary> AddToManifestAsync(FileInfo manifestFile, DirectoryInfo root, string algorithm, List<string> filesToAdd, int threads, CancellationToken cancellationToken)
+  public async Task<FinalSummary> AddToManifestAsync(FileInfo manifestFile, DirectoryInfo root, 
+    string algorithm, IReadOnlyCollection<string> filesToAdd, int threads, CancellationToken cancellationToken)
   {
-    return await ProcessManifestFilesAsync(ManifestOperationMode.Add, manifestFile, root, algorithm, filesToAdd, threads, cancellationToken);
+    return await ProcessManifestFilesAsync(ManifestOperationMode.Add, manifestFile, 
+      root, algorithm, filesToAdd, threads, cancellationToken);
   }
 }

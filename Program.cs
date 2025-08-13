@@ -4,6 +4,7 @@ using Humanizer;
 
 using Spectre.Console;
 
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 
 public class Program
@@ -254,50 +255,23 @@ public class Program
       return -1;
     }
 
-    string[] files = [];
-    List<string> newFiles = [];
+    IReadOnlyCollection<string> files = [];
+    IReadOnlyCollection<string> newFiles = [];
     long totalBytes = 0;
     if (mode == ManifestOperationMode.Create) {
-      await AnsiConsole.Status()
-          .Spinner(Spinner.Known.Dots)
-          .SpinnerStyle(Style.Parse("green"))
-          .StartAsync($"Calculating total size: {rootPath}...", async ctx => {
-            var allFiles = Directory.GetFiles(rootPath, "*", SearchOption.AllDirectories);
-            var relFiles = GlobUtils.FilterFiles(allFiles, rootPath, options.IncludeGlobs, options.ExcludeGlobs);
-            files = [.. relFiles];
-            totalBytes = files.Select(f => new FileInfo(Path.Combine(rootPath, f)).Length).Sum();
-            await Task.Delay(100, cancellationToken);
-          });
-      if (files is null or []) {
+      (files, totalBytes) = await FilesToAddAsync(options, rootPath, cancellationToken);
+      if (files.Count == 0) {
         AnsiConsole.MarkupLine("[yellow]No files found in the specified root directory.[/]");
         return 1;
       }
     } else {
-      IReadOnlyList<ManifestEntry> manifestEntries = [];
-      await AnsiConsole.Status()
-          .Spinner(Spinner.Known.Dots)
-          .SpinnerStyle(Style.Parse("green"))
-          .StartAsync($"Reading manifest: {options.ChecksumFile.FullName}...", async ctx => {
-            var reader = new ManifestReader(options.ChecksumFile, options.RootDirectory);
-            manifestEntries = await reader.ReadEntriesAsync(cancellationToken);
-            await Task.Delay(100, cancellationToken);
-          });
-      var listedFiles = new HashSet<string>(manifestEntries.Select(e => e.RelativePath), StringComparer.OrdinalIgnoreCase);
-      await AnsiConsole.Status()
-          .Spinner(Spinner.Known.Dots)
-          .SpinnerStyle(Style.Parse("green"))
-          .StartAsync($"Scanning directory: {rootPath}...", async ctx => {
-            var allFiles = Directory.GetFiles(rootPath, "*", SearchOption.AllDirectories);
-            var filteredFiles = GlobUtils.FilterFiles(allFiles, rootPath, options.IncludeGlobs, options.ExcludeGlobs);
-            newFiles = [.. filteredFiles
-              .Where(rel => !listedFiles.Contains(rel))];
-            if (newFiles.Count == 0) {
-              AnsiConsole.MarkupLine("[yellow]No new files to add to manifest.[/]");
-            }
-            totalBytes = newFiles.Select(f => new FileInfo(Path.Combine(rootPath, f)).Length).Sum();
-            await Task.Delay(100, cancellationToken);
-          });
+      (newFiles, totalBytes) = await NewFilesAsync(options, rootPath, cancellationToken);
+      if (newFiles.Count == 0) {
+        AnsiConsole.MarkupLine("[yellow]No new files to add to manifest.[/]");
+        return 1;
+      }
     }
+    await Task.Delay(100, cancellationToken);
 
     long totalBytesRead = 0;
     int filesProcessed = 0;
@@ -357,6 +331,66 @@ public class Program
     if (summary.ErrorCount > 0) return -1;
     if (summary.WarningCount > 0) return 1;
     return 0;
+  }
+
+  private static async Task<(IReadOnlyCollection<string> newFiles, long totalBytes)> NewFilesAsync(
+    CliOptions options, string rootPath, 
+    CancellationToken cancellationToken = default)
+  {
+    List<string> newFiles = [];
+    var totalBytes = 0L;
+    IReadOnlyList<ManifestEntry> manifestEntries = [];
+    await AnsiConsole.Status()
+        .Spinner(Spinner.Known.Dots)
+        .SpinnerStyle(Style.Parse("green"))
+        .StartAsync($"Reading manifest: {options.ChecksumFile.FullName}...", async ctx => {
+          var reader = new ManifestReader(options.ChecksumFile, options.RootDirectory);
+          manifestEntries = await reader.ReadEntriesAsync(cancellationToken);
+          await Task.Delay(100, cancellationToken);
+        });
+    var listedFiles = new HashSet<string>(manifestEntries.Select(e => e.RelativePath), StringComparer.OrdinalIgnoreCase);
+    await AnsiConsole.Status()
+        .Spinner(Spinner.Known.Dots)
+        .SpinnerStyle(Style.Parse("green"))
+        .StartAsync($"Scanning directory: {rootPath}...", async ctx => {
+          var dirInfo = new DirectoryInfo(rootPath);
+          foreach (var fsi in dirInfo.EnumerateFileSystemInfos("*", SearchOption.AllDirectories)) {
+            if (fsi is FileInfo fi) {
+              var relPath = Path.GetRelativePath(rootPath, fi.FullName);
+              ctx.Status = $"[green]Scanning directory: {rootPath}[/] [grey]({relPath})[/]...";
+              if (GlobUtils.IsMatch(relPath, options.IncludeGlobs, options.ExcludeGlobs) && !listedFiles.Contains(relPath)) {
+                newFiles.Add(relPath);
+                totalBytes += fi.Length;
+              }
+            }
+          }
+        });
+    return (newFiles, totalBytes);
+  }
+
+  private static async Task<(IReadOnlyCollection<string> files, long totalBytes)> FilesToAddAsync(CliOptions options, string rootPath, CancellationToken cancellationToken)
+  {
+    List<string> files = [];
+    var totalBytes = 0L;
+
+    await AnsiConsole.Status()
+              .Spinner(Spinner.Known.Dots)
+              .SpinnerStyle(Style.Parse("green"))
+              .StartAsync($"Calculating total size: {rootPath}...", async ctx => {
+                var dirInfo = new DirectoryInfo(rootPath);
+                foreach (var fsi in dirInfo.EnumerateFileSystemInfos("*", SearchOption.AllDirectories)) {
+                  if (fsi is FileInfo fi) {
+                    var relPath = Path.GetRelativePath(rootPath, fi.FullName);
+                    ctx.Status = $"[green]Calculating total size: {rootPath}[/] [grey]({relPath})[/]...";
+
+                    if (GlobUtils.IsMatch(relPath, options.IncludeGlobs, options.ExcludeGlobs)) {
+                      files.Add(relPath);
+                      totalBytes += fi.Length;
+                    }
+                  }
+                }
+              });
+    return (files, totalBytes);
   }
 
   public static async Task<int> RunCreateManifest(CliOptions options, int threads, CancellationToken cancellationToken)
