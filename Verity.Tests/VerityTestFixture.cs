@@ -77,9 +77,10 @@ public class VerityTestFixture : IAsyncLifetime, IDisposable
             Directory.Delete(TempDir, true);
         return Task.CompletedTask;
     }
-    public void Dispose()
-    {
-        if (Directory.Exists(TempDir))
-            Directory.Delete(TempDir, true);
-    }
+  public void Dispose()
+  {
+    if (Directory.Exists(TempDir))
+      Directory.Delete(TempDir, true);
+    GC.SuppressFinalize(this);
+  }
 }

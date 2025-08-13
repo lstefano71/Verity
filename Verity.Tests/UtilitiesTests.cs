@@ -12,8 +12,8 @@ public class UtilitiesTests
   public void AbbreviatePathForDisplay_TruncatesCorrectly(string path, int maxLength, string expectedStart)
   {
     var result = Utilities.AbbreviatePathForDisplay(path, maxLength);
-    result.Should().StartWith(expectedStart.Substring(0, Math.Min(result.Length, expectedStart.Length)));
-    result.Length.Should().BeLessThanOrEqualTo(maxLength);        
+    result.Should().StartWith(expectedStart[..Math.Min(result.Length, expectedStart.Length)]);
+    result.Length.Should().BeLessThanOrEqualTo(maxLength);
     }
 
     [Fact]
@@ -44,6 +44,6 @@ public class UtilitiesTests
     {
         var path = "   ";
         var result = Utilities.AbbreviatePathForDisplay(path, 2);
-        result.Should().Be("   ");
+        result.Should().Be("");
     }
 }

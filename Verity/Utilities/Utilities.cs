@@ -2,35 +2,41 @@
 
 public static class Utilities
 {
-  // Abbreviate a path to a fixed length (default 40 chars) for display
   public static string AbbreviatePathForDisplay(string path, int maxLength = 40)
   {
-    if (string.IsNullOrEmpty(path) || path.Length <= maxLength) return path;
-    var dir = Path.GetDirectoryName(path) ?? "";
-    var file = Path.GetFileNameWithoutExtension(path);
-    var ext = Path.GetExtension(path);
-    static string middleTrunc(string s, int len)
+    path = path?.Trim();
+    if (string.IsNullOrWhiteSpace(path)) return path;
+
+    if (path.Length <= maxLength) return path;
+    if (maxLength < 4) return path[0] + ".." + path[1];
+
+    // Detect drive letter and colon (Windows style)
+    string drive = "";
+    string rest = path;
+    if (path.Length > 2 && path[1] == ':' && (path[2] == '\\' || path[2] == '/'))
     {
-      if (s.Length <= len) return s;
-      int keep = len - 3;
-      int left = keep / 2;
-      int right = keep - left;
-      return string.Concat(s.AsSpan(0, left), "...", s.AsSpan(s.Length - right));
+        drive = path[..3]; // e.g. "C:\"
+        rest = path[3..];
     }
-    string result = dir.Length > 0 ? dir + Path.DirectorySeparatorChar + file + ext : file + ext;
-    if (result.Length <= maxLength) return result;
-    result = middleTrunc(result, maxLength);
-    if (result.Length <= maxLength) return result;
-    string dirTrunc = middleTrunc(dir, Math.Max(0, maxLength - (file.Length + ext.Length + 1)));
-    result = dirTrunc + Path.DirectorySeparatorChar + file + ext;
-    if (result.Length <= maxLength) return result;
-    string fileTrunc = middleTrunc(file, Math.Max(0, maxLength - (dirTrunc.Length + ext.Length + 1)));
-    result = dirTrunc + Path.DirectorySeparatorChar + fileTrunc + ext;
-    if (result.Length <= maxLength) return result;
-    string extTrunc = ext.Length > 0 ? middleTrunc(ext, Math.Max(0, maxLength - (dirTrunc.Length + fileTrunc.Length + 1))) : "";
-    result = dirTrunc + Path.DirectorySeparatorChar + fileTrunc + extTrunc;
-    if (result.Length <= maxLength) return result;
-    return string.Concat(result.AsSpan(0, maxLength - 3), "...");
+
+    var dir = Path.GetDirectoryName(rest) ?? "";
+    var file = Path.GetFileName(rest); // Use full filename for display
+    if (string.IsNullOrWhiteSpace(file)) return "";
+
+    // Always produce C:\...\file.txt style for long paths
+    if (dir.Length > 0 && (drive + dir + Path.DirectorySeparatorChar + file).Length > maxLength)
+    {
+        // Show drive, ellipsis, then filename
+        string abbreviated = $"{drive}...{Path.DirectorySeparatorChar}{file}";
+        if (abbreviated.Length > maxLength)
+            abbreviated = abbreviated[..maxLength];
+        return abbreviated;
+    }
+
+    string result = drive + (dir.Length > 0 ? dir + Path.DirectorySeparatorChar + file : file);
+    if (result.Length > maxLength)
+      result = result[..maxLength];
+    return result;
   }
 
   // Pads the abbreviated path with '▪' to the left if needed, then escapes for Spectre.Console

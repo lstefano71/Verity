@@ -1,13 +1,12 @@
 using Xunit;
 using FluentAssertions;
 
-public class VerifyCommandTests : IClassFixture<VerityTestFixture>
+public class VerifyCommandTests(VerityTestFixture fixture) : IClassFixture<VerityTestFixture>
 {
-    readonly VerityTestFixture fixture;
-    public VerifyCommandTests(VerityTestFixture fixture) => this.fixture = fixture;
+    readonly VerityTestFixture fixture = fixture;
 
-    [Fact]
-    public async void Verify_Success()
+  [Fact]
+    public async Task Verify_Success()
     {
         var file = fixture.CreateTestFile("a.txt", "hello");
         var hash = "5d41402abc4b2a76b9719d911017c592"; // md5 of "hello"
@@ -20,7 +19,7 @@ public class VerifyCommandTests : IClassFixture<VerityTestFixture>
     }
 
     [Fact]
-    public async void Verify_FileNotFound()
+    public async Task Verify_FileNotFound()
     {
         var manifest = $"deadbeef\tnotfound.txt";
         fixture.CreateTestFile("manifest.txt", manifest);
@@ -31,7 +30,7 @@ public class VerifyCommandTests : IClassFixture<VerityTestFixture>
     }
 
     [Fact]
-    public async void Verify_HashMismatch_Error()
+    public async Task Verify_HashMismatch_Error()
     {
         var file = fixture.CreateTestFile("a.txt", "hello");
         var manifest = $"deadbeef\ta.txt";
@@ -43,7 +42,7 @@ public class VerifyCommandTests : IClassFixture<VerityTestFixture>
     }
 
     [Fact]
-    public async void Verify_HashMismatch_Warning()
+    public async Task Verify_HashMismatch_Warning()
     {
         var file = fixture.CreateTestFile("a.txt", "hello");
         System.Threading.Thread.Sleep(1100); // ensure file is newer
@@ -56,7 +55,7 @@ public class VerifyCommandTests : IClassFixture<VerityTestFixture>
     }
 
     [Fact]
-    public async void Verify_UnlistedFile_Warning()
+    public async Task Verify_UnlistedFile_Warning()
     {
         fixture.CreateTestFile("a.txt", "hello");
         fixture.CreateTestFile("manifest.txt", $"deadbeef\ta.txt");
@@ -68,7 +67,7 @@ public class VerifyCommandTests : IClassFixture<VerityTestFixture>
     }
 
     [Fact]
-    public async void Verify_GlobFiltering()
+    public async Task Verify_GlobFiltering()
     {
         fixture.CreateTestFile("a.txt", "hello");
         fixture.CreateTestFile("b.log", "log");

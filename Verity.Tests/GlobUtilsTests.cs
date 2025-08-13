@@ -42,7 +42,7 @@ public class GlobUtilsTests
     [Fact]
     public void IsMatch_CaseInsensitive()
     {
-        var result = GlobUtils.IsMatch("FILE.TXT", new[] { "*.txt" }, null);
+        var result = GlobUtils.IsMatch("FILE.TXT", ["*.txt"], null);
         result.Should().BeTrue();
     }
 
@@ -50,13 +50,13 @@ public class GlobUtilsTests
     public void IsMatch_NullOrEmptyPatterns_DefaultsToIncludeAll()
     {
         GlobUtils.IsMatch("any.file", null, null).Should().BeTrue();
-        GlobUtils.IsMatch("any.file", new string[] { }, null).Should().BeTrue();
+        GlobUtils.IsMatch("any.file", [], null).Should().BeTrue();
     }
 
     [Fact]
     public void IsMatch_InvalidGlobPattern_DoesNotThrow()
     {
-        var result = GlobUtils.IsMatch("file.txt", new[] { "[invalid" }, null);
+        var result = GlobUtils.IsMatch("file.txt", ["[invalid"], null);
         result.Should().BeFalse();
     }
 }

@@ -2,13 +2,12 @@ using Xunit;
 using FluentAssertions;
 using System.IO;
 
-public class CreateCommandTests : IClassFixture<VerityTestFixture>
+public class CreateCommandTests(VerityTestFixture fixture) : IClassFixture<VerityTestFixture>
 {
-    readonly VerityTestFixture fixture;
-    public CreateCommandTests(VerityTestFixture fixture) => this.fixture = fixture;
+    readonly VerityTestFixture fixture = fixture;
 
-    [Fact]
-    public async void Create_BasicCreation()
+  [Fact]
+    public async Task Create_BasicCreation()
     {
         fixture.CreateTestFile("a.txt", "hello");
         var result = await fixture.RunVerity("create");
@@ -21,7 +20,7 @@ public class CreateCommandTests : IClassFixture<VerityTestFixture>
     }
 
     [Fact]
-    public async void Create_EmptyDirectory()
+    public async Task Create_EmptyDirectory()
     {
         var result = await fixture.RunVerity("create");
         result.ExitCode.Should().Be(1);
@@ -31,7 +30,7 @@ public class CreateCommandTests : IClassFixture<VerityTestFixture>
     }
 
     [Fact]
-    public async void Create_GlobFiltering()
+    public async Task Create_GlobFiltering()
     {
         fixture.CreateTestFile("a.txt", "hello");
         fixture.CreateTestFile("b.log", "log");
