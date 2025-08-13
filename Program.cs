@@ -174,7 +174,11 @@ public class Program
           var mainTask = ctx.AddTask($"[green]Verifying files ({totalBytes.Bytes().Humanize()})[/]", maxValue: totalFiles);
           var verificationService = new VerificationService();
 
-          verificationService.FileStarted += (sender, e) => { };
+          verificationService.FileStarted += (sender, e) => {
+            int padLen = 50;
+            var safeRelPath = Utilities.AbbreviateAndPadPathForDisplay(e.Entry.RelativePath, padLen);
+            e.Bag = ctx.AddTask(safeRelPath, maxValue: e.FileSize > 0 ? e.FileSize : 1);
+          };
           verificationService.FileProgress += (sender, e) => {
             if (e.Bag is ProgressTask fileTask) {
               fileTask.Value = e.BytesRead;
@@ -188,7 +192,7 @@ public class Program
           };
           verificationService.FileFoundNotInChecksumList += (path) => { };
 
-          summary = await verificationService.VerifyChecksumsAsync(options, manifestEntries, cancellationToken, threads, ctx);
+          summary = await verificationService.VerifyChecksumsAsync(options, manifestEntries, threads, cancellationToken);
           mainTask.StopTask();
         });
 

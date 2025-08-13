@@ -10,7 +10,7 @@ public class FileStartedEventArgs(ChecksumEntry entry, string fullPath, long fil
   public ChecksumEntry Entry { get; } = entry;
   public string FullPath { get; } = fullPath;
   public long FileSize { get; } = fileSize;
-  public object? Bag { get; } = bag;
+  public object? Bag { get; set; } = bag;
 }
 
 public class FileProgressEventArgs(ChecksumEntry entry, string fullPath, long bytesRead, long fileSize, object? bag) : EventArgs
@@ -38,10 +38,8 @@ public class VerificationService
   public async Task<FinalSummary> VerifyChecksumsAsync(
       CliOptions options,
       IReadOnlyList<ManifestEntry> manifestEntries,
-      CancellationToken cancellationToken,
       int parallelism = -1,
-      ProgressContext? ctx = null
-  )
+      CancellationToken cancellationToken = default)
   {
     if (parallelism <= 0) parallelism = Environment.ProcessorCount;
     var rootPath = options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName!;
@@ -83,13 +81,9 @@ public class VerificationService
             cancellationToken.ThrowIfCancellationRequested();
             var fullPath = Path.Combine(rootPath, job.Entry.RelativePath);
             VerificationResult result;
-            ProgressTask? progressTask = null;
-            if (ctx is not null) {
-              int padLen = 50;
-              var safeRelPath = Utilities.AbbreviateAndPadPathForDisplay(job.Entry.RelativePath, padLen);
-              progressTask = ctx.AddTask(safeRelPath, maxValue: job.FileSize > 0 ? job.FileSize : 1);
-            }
-            FileStarted?.Invoke(this, new FileStartedEventArgs(job.Entry, fullPath, job.FileSize, (object?)progressTask));
+            var evt = new FileStartedEventArgs(job.Entry, fullPath, job.FileSize, null);
+            FileStarted?.Invoke(this, evt);
+            var taskInfo = evt.Bag;
 
             if (job.FileSize < 0) {
               result = new(job.Entry, ResultStatus.Error, Details: "File not found.", FullPath: fullPath);
@@ -105,7 +99,7 @@ public class VerificationService
                     while ((bytesRead = await stream.ReadAsync(buffer, cancellationToken)) > 0) {
                       hasher.AppendData(buffer, 0, bytesRead);
                       bytesReadTotal += bytesRead;
-                      FileProgress?.Invoke(this, new FileProgressEventArgs(job.Entry, fullPath, bytesReadTotal, job.FileSize, (object?)progressTask));
+                      FileProgress?.Invoke(this, new FileProgressEventArgs(job.Entry, fullPath, bytesReadTotal, job.FileSize, taskInfo));
                     }
                     actualHash = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
                   } finally {
@@ -126,7 +120,7 @@ public class VerificationService
                 result = new(job.Entry, ResultStatus.Warning, Details: $"Cannot read file: {ex.Message}", FullPath: fullPath);
               }
             }
-            FileCompleted?.Invoke(this, new FileCompletedEventArgs(result, (object?)progressTask));
+            FileCompleted?.Invoke(this, new FileCompletedEventArgs(result, taskInfo));
             await resultChannel.Writer.WriteAsync(result, cancellationToken);
 
             if (result.Status != ResultStatus.Success) {
