@@ -9,6 +9,7 @@ public class ProcessResult
 
 public class CommonTestFixture : IAsyncLifetime, IDisposable
 {
+  public bool DebugOutputEnabled { get; set; } = false;
   public string TempDir { get; private set; } = "";
   public CommonTestFixture()
   {
@@ -88,6 +89,10 @@ public class CommonTestFixture : IAsyncLifetime, IDisposable
     var stdOut = await proc.StandardOutput.ReadToEndAsync();
     var stdErr = await proc.StandardError.ReadToEndAsync();
     proc.WaitForExit();
+    if (DebugOutputEnabled) {
+      Console.WriteLine("STDOUT:\n" + stdOut);
+      Console.WriteLine("STDERR:\n" + stdErr);
+    }
     return new ProcessResult {
       ExitCode = proc.ExitCode,
       StdOut = stdOut,

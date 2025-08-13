@@ -1,7 +1,5 @@
 using FluentAssertions;
 
-using System.Security.Cryptography;
-
 public class AddCommandTests : CommandTestBase, IClassFixture<CommonTestFixture>
 {
   public AddCommandTests(CommonTestFixture fixture) : base(fixture) { }
@@ -30,12 +28,8 @@ public class AddCommandTests : CommandTestBase, IClassFixture<CommonTestFixture>
     Directory.CreateDirectory(Path.Combine(fixture.TempDir, manifestDir));
     var manifestPath = Path.Combine(manifestDir, "manifest.md5");
     var result = await fixture.RunVerity($"create {manifestPath} --root .");
-    Console.WriteLine("STDOUT:\n" + result.StdOut);
-    Console.WriteLine("STDERR:\n" + result.StdErr);
     // Exclude the manifest file itself from being added
     result = await fixture.RunVerity($"add {manifestPath} --root . --exclude \"manifests/*\"");
-    Console.WriteLine("STDOUT:\n" + result.StdOut);
-    Console.WriteLine("STDERR:\n" + result.StdErr);
     result.ExitCode.Should().Be(1);
 
     var manifestContent = File.ReadAllText(Path.Combine(fixture.TempDir, manifestPath));

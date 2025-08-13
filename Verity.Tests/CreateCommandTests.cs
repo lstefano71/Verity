@@ -1,7 +1,5 @@
 using FluentAssertions;
 
-using System.Security.Cryptography;
-
 public class CreateCommandTests : CommandTestBase, IClassFixture<CommonTestFixture>
 {
   public CreateCommandTests(CommonTestFixture fixture) : base(fixture) { }
@@ -13,8 +11,6 @@ public class CreateCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
     var manifestPath = fixture.GetManifestPath("md5");
     if (File.Exists(manifestPath)) File.Delete(manifestPath);
     var result = await fixture.RunVerity("create manifest.md5");
-    Console.WriteLine("STDOUT:\n" + result.StdOut);
-    Console.WriteLine("STDERR:\n" + result.StdErr);
     result.ExitCode.Should().Be(0);
     File.Exists(manifestPath).Should().BeTrue();
     var manifestContent = File.ReadAllText(manifestPath);
@@ -31,12 +27,10 @@ public class CreateCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
     var reportPath = fixture.GetFullPath("report.tsv");
     if (File.Exists(reportPath)) File.Delete(manifestPath);
     File.Exists(manifestPath).Should().BeFalse();
-    var manifestDir = Path.GetDirectoryName(manifestPath);
+    var manifestDir = Path.GetDirectoryName(manifestPath)!;
     Directory.Exists(manifestDir).Should().BeTrue();
     Directory.GetFiles(manifestDir).Should().BeEmpty();
     var result = await fixture.RunVerity("create manifest.md5 --tsv-report report.tsv");
-    Console.WriteLine("STDOUT:\n" + result.StdOut);
-    Console.WriteLine("STDERR:\n" + result.StdErr);
     result.ExitCode.Should().Be(1);
     File.Exists(manifestPath).Should().BeTrue();
     File.ReadAllText(manifestPath).Should().BeEmpty();
@@ -52,8 +46,6 @@ public class CreateCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
     var manifestPath = fixture.GetManifestPath("md5");
     if (File.Exists(manifestPath)) File.Delete(manifestPath);
     var result = await fixture.RunVerity("create manifest.md5 --include \"*.txt;*.log\" --exclude \"*.tmp\"");
-    Console.WriteLine("STDOUT:\n" + result.StdOut);
-    Console.WriteLine("STDERR:\n" + result.StdErr);
     result.ExitCode.Should().Be(0);
     var manifestContent = File.ReadAllText(manifestPath);
     manifestContent.Should().Contain("a.txt");
