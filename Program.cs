@@ -299,7 +299,13 @@ public class Program
         .StartAsync(async ctx => {
           var mainTask = ctx.AddTask($"[green]{(mode == ManifestOperationMode.Create ? "Creating manifest" : "Adding to manifest")} ({totalBytes.Bytes().Humanize()})[/]", maxValue: totalBytes);
           var manifestService = new ManifestCreationService();
-          manifestService.FileStarted += (sender, e) => { };
+          manifestService.FileStarted += (sender, e) => { 
+            int padLen = 50;
+            var safeRelPath = Utilities.AbbreviateAndPadPathForDisplay(e.RelativePath, padLen);
+            var fileTask = ctx.AddTask(safeRelPath, maxValue: e.FileSize > 0 ? e.FileSize : 1);
+            e.Bag = fileTask;
+            fileTask.Value = 0;
+          };
           manifestService.FileProgress += (sender, e) => {
             if (e.Bag is ProgressTask fileTask) {
               fileTask.Value = e.BytesRead;
@@ -316,11 +322,11 @@ public class Program
           if (mode == ManifestOperationMode.Create)
             exitCode = await manifestService.CreateManifestAsync(options.ChecksumFile,
               new DirectoryInfo(rootPath), options.Algorithm,
-              files, threads, cancellationToken, ctx);
+              files, threads, cancellationToken);
           else
             exitCode = await manifestService.AddToManifestAsync(options.ChecksumFile,
               new DirectoryInfo(rootPath), options.Algorithm,
-              newFiles, threads, cancellationToken, ctx);
+              newFiles, threads, cancellationToken);
           mainTask.StopTask();
         });
     stopwatch.Stop();
