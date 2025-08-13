@@ -39,6 +39,5 @@ public record FinalSummary(
     int WarningCount,
     int ErrorCount,
     long TotalBytesRead,
-    IReadOnlyList<VerificationResult> ProblematicResults,
-    IReadOnlyList<string> UnlistedFiles
+    IReadOnlyList<VerificationResult> ProblematicResults
 );

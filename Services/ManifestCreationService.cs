@@ -39,7 +39,7 @@ public class ManifestCreationService
     string algorithm, IEnumerable<string> files, int threads, CancellationToken cancellationToken)
   {
     if (files == null || !files.Any())
-      return new FinalSummary(0, 0, 0, 0, 0, [], []);
+      return new FinalSummary(0, 0, 0, 0, 0, []);
     var newEntries = new ConcurrentBag<(string hash, string relativePath)>();
     var problematicResults = new ConcurrentBag<VerificationResult>();
     int success = 0, warnings = 0, errors = 0;
@@ -127,8 +127,7 @@ public class ManifestCreationService
       warnings,
       errors,
       totalBytesRead,
-      [.. problematicResults],
-      []
+      [.. problematicResults]
     );
   }
 

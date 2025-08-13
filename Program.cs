@@ -175,7 +175,7 @@ public class Program
         });
 
     var stopwatch = Stopwatch.StartNew();
-    FinalSummary summary = new(0, 0, 0, 0, 0, [], []);
+    FinalSummary summary = new(0, 0, 0, 0, 0, []);
 
     await AnsiConsole.Progress()
         .AutoClear(true)
@@ -275,7 +275,7 @@ public class Program
 
     long totalBytesRead = 0;
     int filesProcessed = 0;
-    FinalSummary summary = new(0, 0, 0, 0, 0, [], []);
+    FinalSummary summary = new(0, 0, 0, 0, 0, []);
     await AnsiConsole.Progress()
         .AutoClear(true)
         .HideCompleted(true)

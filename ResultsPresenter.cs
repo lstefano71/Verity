@@ -69,7 +69,7 @@ public class ResultsPresenter
 
   public static void RenderDiagnosticsTable(FinalSummary summary)
   {
-    if ((summary.ProblematicResults?.Count ?? 0) == 0 && (summary.UnlistedFiles?.Count ?? 0) == 0)
+    if ((summary.ProblematicResults?.Count ?? 0) == 0)
       return;
 
     const int hashDisplayLen = 12;
@@ -103,16 +103,6 @@ public class ResultsPresenter
       );
     }
 
-    foreach (var file in summary.UnlistedFiles.OrderBy(f => f)) {
-      table.AddRow(
-          "Warning",
-          Markup.Escape(file),
-          "File exists but not in checksum list.",
-          Markup.Escape("N/A"),
-          Markup.Escape("N/A")
-      );
-    }
-
     AnsiConsole.Write(table);
   }
 
@@ -128,16 +118,6 @@ public class ResultsPresenter
           result.Details ?? "",
           result.Entry.ExpectedHash,
           result.ActualHash ?? ""
-      ));
-    }
-
-    foreach (var file in summary.UnlistedFiles.OrderBy(f => f)) {
-      errorReport.AppendLine(string.Join("\t",
-          "WARNING",
-          file,
-          "File exists but not in checksum list.",
-          "",
-          ""
       ));
     }
 

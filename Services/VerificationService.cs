@@ -53,7 +53,7 @@ public class VerificationService
     long totalBytesRead = 0;
 
     var problematicResults = new List<VerificationResult>();
-    var unlistedFiles = new List<string>();
+    // var unlistedFiles = new List<string>(); // REMOVE
 
     var producer = Task.Run(async () => {
       foreach (var entry in manifestEntries) {
@@ -151,7 +151,15 @@ public class VerificationService
       if (!manifestRelPaths.Contains(relFile) && !absFile.Equals(options.ChecksumFile.FullName, StringComparison.OrdinalIgnoreCase)) {
         warnings++;
         FileFoundNotInChecksumList?.Invoke(absFile);
-        unlistedFiles.Add(absFile);
+        // Instead of unlistedFiles.Add(absFile), add to problematicResults:
+        var entry = new ChecksumEntry("", relFile);
+        problematicResults.Add(new VerificationResult(
+            entry,
+            ResultStatus.Warning,
+            ActualHash: null,
+            Details: "File exists but not in checksum list.",
+            FullPath: absFile
+        ));
       }
     }
 
@@ -163,8 +171,8 @@ public class VerificationService
         warnings,
         errors,
         totalBytesRead,
-        problematicResults,
-        unlistedFiles
+        problematicResults
+        // REMOVE unlistedFiles
     );
   }
 }
