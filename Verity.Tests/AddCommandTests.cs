@@ -89,4 +89,31 @@ public class AddCommandTests : CommandTestBase, IClassFixture<VerityTestFixture>
     manifestContent.Should().Contain("c.txt"); // new entry added
     manifestContent.Should().NotContain("b.log"); // excluded, not present
   }
+
+  [Fact]
+  public async Task Add_WithCustomRoot_AddsOnlyRootFiles()
+  {
+    // Create files in a subdirectory
+    var subDir = "subdir";
+    Directory.CreateDirectory(Path.Combine(fixture.TempDir, subDir));
+    fixture.CreateTestFile(Path.Combine(subDir, "a.txt"), "hello");
+    fixture.CreateTestFile("b.txt", "world"); // Should not be added
+
+    // Create manifest in root, only for a.txt
+    var manifestPath = fixture.GetManifestPath("md5");
+    var result = await fixture.RunVerity($"create manifest.md5 --include \"{subDir}/*\"");
+    result.ExitCode.Should().Be(0);
+
+    // Add new files from subdir only
+    fixture.CreateTestFile(Path.Combine(subDir, "c.txt"), "extra");
+    fixture.CreateTestFile("d.txt", "other"); // Should not be added
+    result = await fixture.RunVerity($"add manifest.md5 --root {subDir}");
+    result.ExitCode.Should().Be(0);
+
+    var manifestContent = File.ReadAllText(manifestPath);
+    manifestContent.Should().Contain("a.txt"); // original entry
+    manifestContent.Should().Contain("c.txt"); // new entry from subdir
+    manifestContent.Should().NotContain("b.txt"); // not in root
+    manifestContent.Should().NotContain("d.txt"); // not in root
+  }
 }

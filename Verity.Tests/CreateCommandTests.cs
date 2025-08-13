@@ -67,4 +67,24 @@ public class CreateCommandTests : CommandTestBase, IClassFixture<VerityTestFixtu
     manifestContent.Should().Contain("b.log");
     manifestContent.Should().NotContain("c.tmp");
   }
+
+  [Fact]
+  public async Task Create_WithCustomRoot_IncludesOnlyRootFiles()
+  {
+    // Create files in a subdirectory
+    var subDir = "subdir";
+    Directory.CreateDirectory(Path.Combine(fixture.TempDir, subDir));
+    fixture.CreateTestFile(Path.Combine(subDir, "a.txt"), "hello");
+    fixture.CreateTestFile("b.txt", "world"); // Should not be included
+
+    // Place manifest in root, but scan subdir
+    var manifestPath = fixture.GetManifestPath("md5");
+    if (File.Exists(manifestPath)) File.Delete(manifestPath);
+    var result = await fixture.RunVerity($"create manifest.md5 --root {subDir}");
+    result.ExitCode.Should().Be(0);
+    File.Exists(manifestPath).Should().BeTrue();
+    var manifestContent = File.ReadAllText(manifestPath);
+    manifestContent.Should().Contain("a.txt");
+    manifestContent.Should().NotContain("b.txt");
+  }
 }
