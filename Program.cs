@@ -5,7 +5,6 @@ using Humanizer;
 using Spectre.Console;
 
 using System.Diagnostics;
-using System.Reflection;
 
 public class Program
 {
@@ -306,7 +305,7 @@ public class Program
         .StartAsync(async ctx => {
           var mainTask = ctx.AddTask($"[green]{(mode == ManifestOperationMode.Create ? "Creating manifest" : "Adding to manifest")} ({totalBytes.Bytes().Humanize()})[/]", maxValue: totalBytes);
           var manifestService = new ManifestCreationService();
-          manifestService.FileStarted += (sender, e) => { 
+          manifestService.FileStarted += (sender, e) => {
             int padLen = 50;
             var safeRelPath = Utilities.AbbreviateAndPadPathForDisplay(e.RelativePath, padLen);
             var fileTask = ctx.AddTask(safeRelPath, maxValue: e.FileSize > 0 ? e.FileSize : 1);

@@ -1,7 +1,6 @@
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
-using System.Xml.Schema;
 
 public class ManifestFileStartedEventArgs(string filePath, string relativePath, long fileSize, object? bag) : EventArgs
 {
@@ -62,7 +61,7 @@ public class ManifestCreationService
                   object? bag = null;
                   var fileStartedArgs = new ManifestFileStartedEventArgs(file, relPath, fileSize, bag);
                   FileStarted?.Invoke(this, fileStartedArgs);
-                  bag = fileStartedArgs.Bag; 
+                  bag = fileStartedArgs.Bag;
 
                   int bufferSize = FileIOUtils.GetOptimalBufferSize(fileSize);
                   long bytesReadTotal = 0;
@@ -126,7 +125,7 @@ public class ManifestCreationService
       warnings,
       errors,
       totalBytesRead,
-      problematicResults.ToArray(),
+      [.. problematicResults],
       []
     );
   }
