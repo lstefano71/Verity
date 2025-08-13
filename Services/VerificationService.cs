@@ -108,7 +108,6 @@ public class VerificationService
                 }
 
                 Interlocked.Add(ref totalBytesRead, job.FileSize);
-
                 if (string.Equals(actualHash, job.Entry.ExpectedHash, StringComparison.OrdinalIgnoreCase)) {
                   result = new(job.Entry, ResultStatus.Success, FullPath: fullPath);
                 } else if (new FileInfo(fullPath).LastWriteTimeUtc > checksumFileTimestamp) {

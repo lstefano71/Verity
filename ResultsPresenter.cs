@@ -17,6 +17,9 @@ public class ResultsPresenter
     summaryTable.AddRow("[green]Success[/]", $"{summary.SuccessCount:N0}");
     summaryTable.AddRow("[yellow]Warnings[/]", $"{summary.WarningCount:N0}");
     summaryTable.AddRow("[red]Errors[/]", $"{summary.ErrorCount:N0}");
+    summaryTable.AddEmptyRow();
+    summaryTable.AddRow("[blue]Total Files[/]", $"{summary.TotalFiles:N0}");
+    summaryTable.AddRow("[blue]Total Bytes Hashed[/]", summary.TotalBytesRead.Bytes().Humanize());
     summaryTable.AddRow("[cyan]Total Time[/]", elapsed.Humanize(2));
     var throughput = summary.TotalBytesRead.Bytes().Per(elapsed).Humanize();
     summaryTable.AddRow("[cyan]Throughput[/]", throughput);
