@@ -35,10 +35,16 @@ public class ManifestCreationService
   public event EventHandler<ManifestFileProgressEventArgs> FileProgress;
   public event EventHandler<ManifestFileCompletedEventArgs> FileCompleted;
 
-  private async Task<int> ProcessManifestFilesAsync(ManifestOperationMode mode, FileInfo manifestFile, DirectoryInfo root, string algorithm, IEnumerable<string> files, int threads, CancellationToken cancellationToken)
+  private async Task<FinalSummary> ProcessManifestFilesAsync(ManifestOperationMode mode, FileInfo manifestFile, DirectoryInfo root, string algorithm, IEnumerable<string> files, int threads, CancellationToken cancellationToken)
   {
-    if (files == null || !files.Any()) return mode == ManifestOperationMode.Create ? 1 : 0;
+    if (files == null || !files.Any())
+      return new FinalSummary(0, 0, 0, 0, 0, [], []);
     var newEntries = new ConcurrentBag<(string hash, string relativePath)>();
+    var problematicResults = new ConcurrentBag<VerificationResult>();
+    int success = 0, warnings = 0, errors = 0;
+    long totalBytesRead = 0;
+    int totalFiles = files.Count();
+
     await Task.WhenAll(
         Partitioner.Create(files).GetPartitions(threads)
             .Select(partition => Task.Run(async () => {
@@ -47,7 +53,12 @@ public class ManifestCreationService
                   cancellationToken.ThrowIfCancellationRequested();
                   var relPath = mode == ManifestOperationMode.Create ? Path.GetRelativePath(root.FullName, partition.Current) : partition.Current;
                   var file = Path.Combine(root.FullName, relPath);
-                  var fileSize = new FileInfo(file).Length;
+                  long fileSize = 0;
+                  try {
+                    fileSize = new FileInfo(file).Length;
+                  } catch {
+                    fileSize = 0;
+                  }
                   object? bag = null;
                   var fileStartedArgs = new ManifestFileStartedEventArgs(file, relPath, fileSize, bag);
                   FileStarted?.Invoke(this, fileStartedArgs);
@@ -56,23 +67,37 @@ public class ManifestCreationService
                   int bufferSize = FileIOUtils.GetOptimalBufferSize(fileSize);
                   long bytesReadTotal = 0;
                   string hash = string.Empty;
-                  using (var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous)) {
-                    using var hasher = IncrementalHash.CreateHash(new HashAlgorithmName(algorithm));
-                    byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
-                    try {
-                      int bytesRead;
-                      while ((bytesRead = await stream.ReadAsync(buffer, cancellationToken)) > 0) {
-                        hasher.AppendData(buffer, 0, bytesRead);
-                        bytesReadTotal += bytesRead;
-                        FileProgress?.Invoke(this, new ManifestFileProgressEventArgs(file, relPath, bytesReadTotal, bytesRead, fileSize, bag));
+                  try {
+                    using (var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous)) {
+                      using var hasher = IncrementalHash.CreateHash(new HashAlgorithmName(algorithm));
+                      byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
+                      try {
+                        int bytesRead;
+                        while ((bytesRead = await stream.ReadAsync(buffer, cancellationToken)) > 0) {
+                          hasher.AppendData(buffer, 0, bytesRead);
+                          bytesReadTotal += bytesRead;
+                          FileProgress?.Invoke(this, new ManifestFileProgressEventArgs(file, relPath, bytesReadTotal, bytesRead, fileSize, bag));
+                        }
+                        hash = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
+                        Interlocked.Add(ref totalBytesRead, fileSize);
+                        success++;
+                      } finally {
+                        ArrayPool<byte>.Shared.Return(buffer);
                       }
-                      hash = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
-                    } finally {
-                      ArrayPool<byte>.Shared.Return(buffer);
                     }
+                    newEntries.Add((hash, relPath));
+                    FileCompleted?.Invoke(this, new ManifestFileCompletedEventArgs(file, relPath, hash, bag));
+                  } catch (Exception ex) {
+                    // File read error
+                    errors++;
+                    problematicResults.Add(new VerificationResult(
+                      new ChecksumEntry("", relPath),
+                      ResultStatus.Error,
+                      null,
+                      $"Cannot read file: {ex.Message}",
+                      file
+                    ));
                   }
-                  newEntries.Add((hash, relPath));
-                  FileCompleted?.Invoke(this, new ManifestFileCompletedEventArgs(file, relPath, hash, bag));
                 }
               }
             }, cancellationToken)));
@@ -95,17 +120,24 @@ public class ManifestCreationService
     }
     using var manifestWriter = new ManifestWriter(manifestFile);
     await manifestWriter.WriteAllEntriesAsync(allEntries);
-    return 0;
+    return new FinalSummary(
+      totalFiles,
+      success,
+      warnings,
+      errors,
+      totalBytesRead,
+      problematicResults.ToArray(),
+      []
+    );
   }
 
-  public async Task<int> CreateManifestAsync(FileInfo outputManifest, DirectoryInfo root, string algorithm, IEnumerable<string> files, int threads, CancellationToken cancellationToken)
+  public async Task<FinalSummary> CreateManifestAsync(FileInfo outputManifest, DirectoryInfo root, string algorithm, IEnumerable<string> files, int threads, CancellationToken cancellationToken)
   {
-    // Compose full file paths from root and relative file names
     var fullPaths = files.Select(f => Path.Combine(root.FullName, f));
     return await ProcessManifestFilesAsync(ManifestOperationMode.Create, outputManifest, root, algorithm, fullPaths, threads, cancellationToken);
   }
 
-  public async Task<int> AddToManifestAsync(FileInfo manifestFile, DirectoryInfo root, string algorithm, List<string> filesToAdd, int threads, CancellationToken cancellationToken)
+  public async Task<FinalSummary> AddToManifestAsync(FileInfo manifestFile, DirectoryInfo root, string algorithm, List<string> filesToAdd, int threads, CancellationToken cancellationToken)
   {
     return await ProcessManifestFilesAsync(ManifestOperationMode.Add, manifestFile, root, algorithm, filesToAdd, threads, cancellationToken);
   }

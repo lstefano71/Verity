@@ -63,6 +63,8 @@ public class Program
   /// <param name="threads">-t, Number of parallel threads to use. Defaults to processor count.</param>
   /// <param name="include">Semicolon-separated glob patterns for files to include in the manifest.</param>
   /// <param name="exclude">Semicolon-separated glob patterns for files to exclude from the manifest.</param>
+  /// <param name="showTable">Force the diagnostic table to be shown even if there are no issues.</param>
+  /// <param name="tsvReport">Path to write a machine-readable TSV report.</param>
   [Command("create")]
   public async Task<int> Create(
       [Argument] string outputManifest,
@@ -71,14 +73,16 @@ public class Program
       int? threads = null,
       string? include = null,
       string? exclude = null,
+      bool showTable = false,
+      string? tsvReport = null,
       CancellationToken cancellationToken = default)
   {
     try {
       var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(outputManifest) : algorithm;
       var options = new CliOptions(new FileInfo(outputManifest),
         !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null, usedAlgorithm,
-        null, // tsvReport is not applicable for create
-        false, // showTable is not applicable for create
+        !string.IsNullOrWhiteSpace(tsvReport) ? new FileInfo(tsvReport) : null,
+        showTable,
         GlobUtils.NormalizeGlobs(include, false),
         GlobUtils.NormalizeGlobs(exclude, true));
 
@@ -98,6 +102,8 @@ public class Program
   /// <param name="threads">-t, Number of parallel threads to use. Defaults to processor count.</param>
   /// <param name="include">Semicolon-separated glob patterns for new files to include.</param>
   /// <param name="exclude">Semicolon-separated glob patterns for files to exclude from being added.</param>
+  /// <param name="showTable">Force the diagnostic table to be shown even if there are no issues.</param>
+  /// <param name="tsvReport">Path to write a machine-readable TSV report.</param>
   [Command("add")]
   public async Task<int> Add(
       [Argument] string manifestPath,
@@ -106,14 +112,16 @@ public class Program
       int? threads = null,
       string? include = null,
       string? exclude = null,
+      bool showTable = false,
+      string? tsvReport = null,
       CancellationToken cancellationToken = default)
   {
     try {
       var usedAlgorithm = string.IsNullOrWhiteSpace(algorithm) ? InferAlgorithmFromExtension(manifestPath) : algorithm;
       var options = new CliOptions(new FileInfo(manifestPath),
         !string.IsNullOrWhiteSpace(root) ? new DirectoryInfo(root) : null, usedAlgorithm,
-        null, // tsvReport is not applicable for add
-        false, // showTable is not applicable for add
+        !string.IsNullOrWhiteSpace(tsvReport) ? new FileInfo(tsvReport) : null,
+        showTable,
         GlobUtils.NormalizeGlobs(include, false),
         GlobUtils.NormalizeGlobs(exclude, true));
 
@@ -123,7 +131,6 @@ public class Program
       return -2;
     }
   }
-
 
   public static async Task<int> RunVerification(CliOptions options, int threads, CancellationToken cancellationToken)
   {
@@ -285,7 +292,7 @@ public class Program
 
     long totalBytesRead = 0;
     int filesProcessed = 0;
-    int exitCode = 0;
+    FinalSummary summary = new(0, 0, 0, 0, 0, [], []);
     await AnsiConsole.Progress()
         .AutoClear(true)
         .HideCompleted(true)
@@ -320,35 +327,27 @@ public class Program
             }
           };
           if (mode == ManifestOperationMode.Create)
-            exitCode = await manifestService.CreateManifestAsync(options.ChecksumFile,
+            summary = await manifestService.CreateManifestAsync(options.ChecksumFile,
               new DirectoryInfo(rootPath), options.Algorithm,
               files, threads, cancellationToken);
           else
-            exitCode = await manifestService.AddToManifestAsync(options.ChecksumFile,
+            summary = await manifestService.AddToManifestAsync(options.ChecksumFile,
               new DirectoryInfo(rootPath), options.Algorithm,
               newFiles, threads, cancellationToken);
           mainTask.StopTask();
         });
     stopwatch.Stop();
-    AnsiConsole.MarkupLine($"[green]Manifest {(mode == ManifestOperationMode.Create ? "created" : "updated")}:[/] {options.ChecksumFile.FullName}");
+    AnsiConsole.MarkupLine($"[green]Manifest {(mode == ManifestOperationMode.Create ? "created" : "updated")}: [/] {options.ChecksumFile.FullName}");
     AnsiConsole.WriteLine();
     AnsiConsole.MarkupLine($"[bold underline]{(mode == ManifestOperationMode.Create ? "Creation" : "Add")} Complete[/]");
-    var summaryTable = new Table()
-      .NoBorder()
-      .HideHeaders()
-      .AddColumn(new TableColumn("Label").LeftAligned())
-      .AddColumn(new TableColumn("Value").LeftAligned());
-    if (mode == ManifestOperationMode.Create) {
-      summaryTable.AddRow("[green]Files[/]", $"{files.Length:N0}");
-    } else {
-      summaryTable.AddRow("[green]Files Added[/]", $"{newFiles.Count:N0}");
-    }
-    summaryTable.AddRow("[cyan]Total Bytes[/]", $"{totalBytes.Bytes().Humanize()}");
-    summaryTable.AddRow("[cyan]Total Time[/]", stopwatch.Elapsed.Humanize(2));
-    var throughput = totalBytes.Bytes().Per(stopwatch.Elapsed).Humanize();
-    summaryTable.AddRow("[cyan]Throughput[/]", throughput);
-    AnsiConsole.Write(summaryTable);
-    return exitCode;
+    ResultsPresenter.RenderSummaryTable(summary, stopwatch.Elapsed);
+    if (options.ShowTable)
+      ResultsPresenter.RenderDiagnosticsTable(summary);
+    if (options.TsvReportFile != null)
+      await ResultsPresenter.WriteErrorReportAsync(summary, options.TsvReportFile);
+    if (summary.ErrorCount > 0) return -1;
+    if (summary.WarningCount > 0) return 1;
+    return 0;
   }
 
   public static async Task<int> RunCreateManifest(CliOptions options, int threads, CancellationToken cancellationToken)
