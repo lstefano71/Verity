@@ -24,6 +24,18 @@ public class VerityTestFixture : IAsyncLifetime, IDisposable
     return fullPath;
   }
 
+  public string GetManifestPath(string extension = "md5")
+  {
+    return Path.Combine(TempDir, $"manifest.{extension}");
+  }
+
+  public void CreateManifest(string extension, params (string hash, string file)[] entries)
+  {
+    var manifestPath = GetManifestPath(extension);
+    var lines = entries.Select(e => $"{e.hash}\t{e.file}");
+    File.WriteAllLines(manifestPath, lines);
+  }
+
   public void ModifyTestFile(string relativePath, string newContent)
   {
     var fullPath = Path.Combine(TempDir, relativePath);
@@ -43,23 +55,26 @@ public class VerityTestFixture : IAsyncLifetime, IDisposable
 
   public async Task<ProcessResult> RunVerity(string args)
   {
-  // Use the main Verity.exe from Verity\bin\Debug\net9.0
-  // Use the correct absolute path for Verity.exe
-  // Use the workspace root to construct the path to Verity.exe
-  // Dynamically search for Verity.exe in candidate locations
-  // Go up to workspace root, then down into Verity/bin/... for Verity.exe
-  var testBaseDir = AppContext.BaseDirectory;
-  // Go up four levels: net9.0 -> Debug -> bin -> Verity.Tests -> workspace root
-  var workspaceRoot = Path.GetFullPath(Path.Combine(testBaseDir, "..", "..", "..", ".."));
-  var verityProjectDir = Path.Combine(workspaceRoot, "Verity");
-  var candidatePaths = new[] {
+    // Use the main Verity.exe from Verity\bin\Debug\net9.0
+    // Use the correct absolute path for Verity.exe
+    // Use the workspace root to construct the path to Verity.exe
+    // Dynamically search for Verity.exe in candidate locations
+    // Go up to workspace root, then down into Verity/bin/... for Verity.exe
+    var testBaseDir = AppContext.BaseDirectory;
+    // Go up four levels: net9.0 -> Debug -> bin -> Verity.Tests -> workspace root
+    var workspaceRoot = Path.GetFullPath(Path.Combine(testBaseDir, "..", "..", "..", ".."));
+    var verityProjectDir = Path.Combine(workspaceRoot, "Verity");
+    var candidatePaths = new[] {
     Path.Combine(verityProjectDir, "bin", "Release", "net9.0", "publish", "Verity.exe"),
     Path.Combine(verityProjectDir, "bin", "Release", "net9.0", "Verity.exe"),
     Path.Combine(verityProjectDir, "bin", "Debug", "net9.0", "Verity.exe")
   };
-  string? exePath = candidatePaths.FirstOrDefault(File.Exists);
-  if (exePath == null)
-    throw new FileNotFoundException($"Verity.exe not found in any candidate location: {string.Join("; ", candidatePaths)}");
+    string? exePath = candidatePaths
+      .Where(File.Exists)
+      .OrderByDescending(File.GetLastWriteTimeUtc)
+      .FirstOrDefault();
+    if (exePath == null)
+      throw new FileNotFoundException($"Verity.exe not found in any candidate location: {string.Join("; ", candidatePaths)}");
     var psi = new ProcessStartInfo {
       FileName = exePath,
       Arguments = args,
@@ -80,7 +95,11 @@ public class VerityTestFixture : IAsyncLifetime, IDisposable
     };
   }
 
-  public Task InitializeAsync() => Task.CompletedTask;
+  public async Task InitializeAsync()
+  {
+    // Remove cleanup logic from fixture
+    await Task.CompletedTask;
+  }
   public Task DisposeAsync()
   {
     if (Directory.Exists(TempDir))

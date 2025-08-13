@@ -68,7 +68,7 @@ public class Program
   public async Task<int> Create(
       [Argument] string outputManifest,
       string? root = null,
-      string algorithm = "SHA256",
+      string algorithm = null,
       int? threads = null,
       string? include = null,
       string? exclude = null,
@@ -260,6 +260,9 @@ public class Program
     if (mode == ManifestOperationMode.Create) {
       (files, totalBytes) = await FilesToAddAsync(options, rootPath, cancellationToken);
       if (files.Count == 0) {
+        // Write an empty manifest using ManifestWriter
+        using var manifestWriter = new ManifestWriter(options.ChecksumFile);
+        await manifestWriter.WriteAllEntriesAsync(Array.Empty<(string hash, string relativePath)>());
         AnsiConsole.MarkupLine("[yellow]No files found in the specified root directory.[/]");
         return 1;
       }
