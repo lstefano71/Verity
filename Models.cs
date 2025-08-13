@@ -23,7 +23,8 @@ public record VerificationResult(
     ResultStatus Status,
     string? ActualHash = null,
     string? Details = null,
-    string? FullPath = null
+    string? FullPath = null,
+  Exception Exception = null
 );
 
 public enum ResultStatus

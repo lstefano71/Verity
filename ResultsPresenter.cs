@@ -18,13 +18,12 @@ public class ResultsPresenter
     // take the top N groups and sum the rest into "Other"
 
     var topGroups = groups.Take(topN).ToList();
-      var otherCount = groups.Skip(topN).Sum(g => g.Count);
-      if (otherCount > 0)
-      {
-          topGroups.Add(new { Label = "Other", Count = otherCount });
-      }
-      // Format with color
-      return topGroups.Select(g => ($"  [{color}]- {g.Label}[/]", g.Count));
+    var otherCount = groups.Skip(topN).Sum(g => g.Count);
+    if (otherCount > 0) {
+      topGroups.Add(new { Label = "Other", Count = otherCount });
+    }
+    // Format with color
+    return topGroups.Select(g => ($"  [{color}]- {g.Label}[/]", g.Count));
   }
 
   public static void RenderSummaryTable(FinalSummary summary, TimeSpan elapsed)
@@ -43,18 +42,16 @@ public class ResultsPresenter
     summaryTable.AddRow("[yellow]Warnings[/]", $"{summary.WarningCount:N0}");
     // Top 3 Details for Warnings, rest as Other
     foreach (var (label, count) in GetTopDetailsGroups(
-        summary.ProblematicResults.Where(r => r.Status == ResultStatus.Warning), "yellow"))
-    {
-        summaryTable.AddRow(label, $"{count:N0}");
+        summary.ProblematicResults.Where(r => r.Status == ResultStatus.Warning), "yellow")) {
+      summaryTable.AddRow(label, $"{count:N0}");
     }
 
     // Errors total
     summaryTable.AddRow("[red]Errors[/]", $"{summary.ErrorCount:N0}");
     // Top 3 Details for Errors, rest as Other
     foreach (var (label, count) in GetTopDetailsGroups(
-        summary.ProblematicResults.Where(r => r.Status == ResultStatus.Error), "red"))
-    {
-        summaryTable.AddRow(label, $"{count:N0}");
+        summary.ProblematicResults.Where(r => r.Status == ResultStatus.Error), "red")) {
+      summaryTable.AddRow(label, $"{count:N0}");
     }
 
     summaryTable.AddEmptyRow();
@@ -88,7 +85,8 @@ public class ResultsPresenter
       string.IsNullOrEmpty(hash) ? "N/A" :
       hash.Length > hashDisplayLen ? hash[..hashDisplayLen] + "…" : hash;
 
-    foreach (var result in summary.ProblematicResults.OrderBy(r => r.Status).ThenBy(r => r.Entry.RelativePath)) {
+    foreach (var result in summary.ProblematicResults
+      .OrderBy(r => r.Status).ThenBy(r => r.Entry.RelativePath)) {
       var statusMarkup = result.Status switch {
         ResultStatus.Warning => "[yellow]Warning[/]",
         ResultStatus.Error => "[red]Error[/]",
@@ -97,7 +95,8 @@ public class ResultsPresenter
       table.AddRow(
           statusMarkup,
           result.FullPath ?? result.Entry.RelativePath,
-          result.Details ?? string.Empty,
+          $"{result.Details ?? string.Empty}{(result.Exception == null ?
+            string.Empty : " " + result.Exception.Message)}",
           TruncateHash(result.Entry.ExpectedHash),
           TruncateHash(result.ActualHash)
       );

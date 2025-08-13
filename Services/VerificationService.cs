@@ -116,7 +116,8 @@ public class VerificationService
                   result = new(job.Entry, ResultStatus.Error, actualHash, "Checksum mismatch.", fullPath);
                 }
               } catch (Exception ex) {
-                result = new(job.Entry, ResultStatus.Warning, Details: $"Cannot read file: {ex.Message}", FullPath: fullPath);
+                result = new(job.Entry, ResultStatus.Warning, Details: "Cannot read file",
+                  FullPath: fullPath, Exception: ex);
               }
             }
             FileCompleted?.Invoke(this, new FileCompletedEventArgs(result, taskInfo));
@@ -172,7 +173,7 @@ public class VerificationService
         errors,
         totalBytesRead,
         problematicResults
-        // REMOVE unlistedFiles
+    // REMOVE unlistedFiles
     );
   }
 }

@@ -4,7 +4,6 @@ using Humanizer;
 
 using Spectre.Console;
 
-using System.Collections.ObjectModel;
 using System.Diagnostics;
 
 public class Program
@@ -168,7 +167,7 @@ public class Program
               if (manifestRelPaths.Contains(relPath)) {
                 totalBytes += fi.Length;
               }
-//              await Task.Delay(10, cancellationToken); 
+              //              await Task.Delay(10, cancellationToken); 
             }
           }
           await Task.Delay(100, cancellationToken); // Ensure spinner is visible
@@ -334,7 +333,7 @@ public class Program
   }
 
   private static async Task<(IReadOnlyCollection<string> newFiles, long totalBytes)> NewFilesAsync(
-    CliOptions options, string rootPath, 
+    CliOptions options, string rootPath,
     CancellationToken cancellationToken = default)
   {
     List<string> newFiles = [];
