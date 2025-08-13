@@ -1,7 +1,38 @@
+using System;
+using System.IO;
+using Verity.Utilities;
+using Xunit;
 using FluentAssertions;
 
-public class GlobUtilsTests
+public class GlobUtilsTests : IDisposable
 {
+  private readonly string tempDir;
+
+  public GlobUtilsTests()
+  {
+    tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+    Directory.CreateDirectory(tempDir);
+  }
+
+  public void Dispose()
+  {
+    if (Directory.Exists(tempDir))
+      Directory.Delete(tempDir, true);
+    GC.SuppressFinalize(this);
+  }
+
+  private string[] CreateFiles(params string[] relativePaths)
+  {
+    var fullPaths = relativePaths.Select(p => Path.Combine(tempDir, p)).ToArray();
+    foreach (var path in fullPaths)
+    {
+      var dir = Path.GetDirectoryName(path);
+      if (!Directory.Exists(dir)) Directory.CreateDirectory(dir!);
+      File.WriteAllText(path, "test");
+    }
+    return fullPaths;
+  }
+
   [Theory]
   [InlineData(null, false, new[] { "**/*" })]
   [InlineData("", false, new[] { "**/*" })]
@@ -62,129 +93,48 @@ public class GlobUtilsTests
   [Fact]
   public void FilterFiles_IncludeOnly_ReturnsMatchingFiles()
   {
-    var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-    Directory.CreateDirectory(tempDir);
-    try {
-      var subdir = Path.Combine(tempDir, "subdir");
-      Directory.CreateDirectory(subdir);
-      var files = new[]
-      {
-        Path.Combine(tempDir, "a.txt"),
-        Path.Combine(tempDir, "b.md"),
-        Path.Combine(tempDir, "c.log"),
-        Path.Combine(subdir, "d.txt"),
-      };
-      foreach (var file in files)
-        File.WriteAllText(file, "test");
-      var result = GlobUtils.FilterFiles(files, tempDir, new[] { "*.txt", "subdir/*.txt" }, null);
-      result.Should().BeEquivalentTo(["a.txt", Path.Combine("subdir", "d.txt")]);
-    } finally {
-      if (Directory.Exists(tempDir))
-        Directory.Delete(tempDir, true);
-    }
+    var files = CreateFiles("a.txt", "b.md", "c.log", Path.Combine("subdir", "d.txt"));
+    var result = GlobUtils.FilterFiles(files, tempDir, ["*.txt", "subdir/*.txt"], null);
+    result.Should().BeEquivalentTo(["a.txt", Path.Combine("subdir", "d.txt")]);
   }
 
   [Fact]
   public void FilterFiles_ExcludeOnly_RemovesExcludedFiles()
   {
-    var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-    Directory.CreateDirectory(tempDir);
-    try {
-      var files = new[]
-      {
-        Path.Combine(tempDir, "a.txt"),
-        Path.Combine(tempDir, "b.md"),
-        Path.Combine(tempDir, "c.log"),
-      };
-      // Create the files physically
-      foreach (var file in files)
-        File.WriteAllText(file, "test");
-
-      var result = GlobUtils.FilterFiles(files, tempDir, null, new[] { "*.md", "*.log" });
-      result.Should().BeEquivalentTo(["a.txt"]);
-    } finally {
-      if (Directory.Exists(tempDir))
-        Directory.Delete(tempDir, true);
-    }
+    var files = CreateFiles("a.txt", "b.md", "c.log");
+    var result = GlobUtils.FilterFiles(files, tempDir, null, ["*.md", "*.log"]);
+    result.Should().BeEquivalentTo(["a.txt"]);
   }
 
   [Fact]
   public void FilterFiles_IncludeAndExclude_FiltersCorrectly()
   {
-    var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-    Directory.CreateDirectory(tempDir);
-    try {
-      var files = new[]
-      {
-        Path.Combine(tempDir, "a.txt"),
-        Path.Combine(tempDir, "b.md"),
-        Path.Combine(tempDir, "c.log"),
-        Path.Combine(tempDir, "d.txt"),
-      };
-      foreach (var file in files)
-        File.WriteAllText(file, "test");
-      var result = GlobUtils.FilterFiles(files, tempDir, new[] { "*.txt", "*.md" }, new[] { "a.txt" });
-      result.Should().BeEquivalentTo(["b.md", "d.txt"]);
-    } finally {
-      if (Directory.Exists(tempDir))
-        Directory.Delete(tempDir, true);
-    }
+    var files = CreateFiles("a.txt", "b.md", "c.log", "d.txt");
+    var result = GlobUtils.FilterFiles(files, tempDir, ["*.txt", "*.md"], ["a.txt"]);
+    result.Should().BeEquivalentTo(["b.md", "d.txt"]);
   }
 
   [Fact]
   public void FilterFiles_NoGlobs_ReturnsAllFiles()
   {
-    var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-    Directory.CreateDirectory(tempDir);
-    try {
-      var files = new[]
-      {
-        Path.Combine(tempDir, "a.txt"),
-        Path.Combine(tempDir, "b.md"),
-      };
-      foreach (var file in files)
-        File.WriteAllText(file, "test");
-      var result = GlobUtils.FilterFiles(files, tempDir, null, null);
-      result.Should().BeEquivalentTo(["a.txt", "b.md"]);
-    } finally {
-      if (Directory.Exists(tempDir))
-        Directory.Delete(tempDir, true);
-    }
+    var files = CreateFiles("a.txt", "b.md");
+    var result = GlobUtils.FilterFiles(files, tempDir, null, null);
+    result.Should().BeEquivalentTo(["a.txt", "b.md"]);
   }
 
   [Fact]
   public void FilterFiles_NoFiles_ReturnsEmpty()
   {
-    var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-    Directory.CreateDirectory(tempDir);
-    try {
-      var files = new string[] { };
-      var result = GlobUtils.FilterFiles(files, tempDir, new[] { "*.txt" }, null);
-      result.Should().BeEmpty();
-    } finally {
-      if (Directory.Exists(tempDir))
-        Directory.Delete(tempDir, true);
-    }
+    var files = Array.Empty<string>();
+    var result = GlobUtils.FilterFiles(files, tempDir, ["*.txt"], null);
+    result.Should().BeEmpty();
   }
 
   [Fact]
   public void FilterFiles_AllFilesExcluded_ReturnsEmpty()
   {
-    var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-    Directory.CreateDirectory(tempDir);
-    try {
-      var files = new[]
-      {
-        Path.Combine(tempDir, "a.txt"),
-        Path.Combine(tempDir, "b.md"),
-      };
-      foreach (var file in files)
-        File.WriteAllText(file, "test");
-      var result = GlobUtils.FilterFiles(files, tempDir, null, new[] { "**/*" });
-      result.Should().BeEmpty();
-    } finally {
-      if (Directory.Exists(tempDir))
-        Directory.Delete(tempDir, true);
-    }
+    var files = CreateFiles("a.txt", "b.md");
+    var result = GlobUtils.FilterFiles(files, tempDir, null, ["**/*"]);
+    result.Should().BeEmpty();
   }
 }
