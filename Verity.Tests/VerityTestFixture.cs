@@ -43,7 +43,23 @@ public class VerityTestFixture : IAsyncLifetime, IDisposable
 
   public async Task<ProcessResult> RunVerity(string args)
   {
-    var exePath = Path.Combine(AppContext.BaseDirectory, "Verity.exe");
+  // Use the main Verity.exe from Verity\bin\Debug\net9.0
+  // Use the correct absolute path for Verity.exe
+  // Use the workspace root to construct the path to Verity.exe
+  // Dynamically search for Verity.exe in candidate locations
+  // Go up to workspace root, then down into Verity/bin/... for Verity.exe
+  var testBaseDir = AppContext.BaseDirectory;
+  // Go up four levels: net9.0 -> Debug -> bin -> Verity.Tests -> workspace root
+  var workspaceRoot = Path.GetFullPath(Path.Combine(testBaseDir, "..", "..", "..", ".."));
+  var verityProjectDir = Path.Combine(workspaceRoot, "Verity");
+  var candidatePaths = new[] {
+    Path.Combine(verityProjectDir, "bin", "Release", "net9.0", "publish", "Verity.exe"),
+    Path.Combine(verityProjectDir, "bin", "Release", "net9.0", "Verity.exe"),
+    Path.Combine(verityProjectDir, "bin", "Debug", "net9.0", "Verity.exe")
+  };
+  string? exePath = candidatePaths.FirstOrDefault(File.Exists);
+  if (exePath == null)
+    throw new FileNotFoundException($"Verity.exe not found in any candidate location: {string.Join("; ", candidatePaths)}");
     var psi = new ProcessStartInfo {
       FileName = exePath,
       Arguments = args,
