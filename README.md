@@ -43,8 +43,8 @@ All commands support these options:
 * `--threads <number>`: Number of parallel threads. Defaults to processor count.
 * `--include <patterns>`: Semicolon-separated glob patterns for files to include (e.g., `*.jpg;*.docx`). Defaults to all files.
 * `--exclude <patterns>`: Semicolon-separated glob patterns for files to exclude (e.g., `*.tmp;*.bak`). Defaults to none.
-* `--showTable`: Force display of the diagnostic table even if there are no issues.
-* `--tsvReport <file>`: Path to write a machine-readable TSV error/warning report. If omitted, TSV is written to `stderr` if issues are found.
+* `--show-table`: Force display of the diagnostic table even if there are no issues.
+* `--tsv-report <file>`: Path to write a machine-readable TSV error/warning report. If omitted, TSV is written to `stderr` if issues are found.
 
 ### `verify`
 
@@ -119,7 +119,7 @@ Verity.exe create D:\data\backups\manifest.sha256 --root D:\data\backups --inclu
 
 **Writing TSV Report to File:**
 ```
-Verity.exe verify C:\archive\manifest.sha256 --tsvReport errors.tsv
+Verity.exe verify C:\archive\manifest.sha256 --tsv-report errors.tsv
 ```
 
 **Adding New Files to a Manifest:**
