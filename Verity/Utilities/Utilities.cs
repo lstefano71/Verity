@@ -1,100 +1,32 @@
 ﻿using Spectre.Console;
 
+using System.Reflection.Metadata;
 using System.Text;
 
 public static class Utilities
 {
   /// <summary>
-  /// Abbreviates a file system path for display by replacing middle components with an ellipsis.
-  /// This method aims to replicate the behavior seen in Visual Studio's "Recent Files" menu.
-  /// It should start by substituting the middle part of the path with an ellipsis ("...") if the path exceeds the specified maximum length.
-  /// Eroding from the middle allows the path to remain recognizable while fitting within a limited space.
-  /// It should eventually return a string that is no longer than the specified maximum length but is as close as possible to the maximum length.
-  /// The erosion could leave nothing but the rightmost part of the path if the path is too long to even include an ellipsis.
+  /// Abbreviates a file system path for display by inserting ellipses in the middle of the path if it exceeds a specified maximum length.
+
   /// </summary>
   /// <param name="path">The path to abbreviate. The function handles null/whitespace and trims the input.</param>
   /// <param name="maxLength">The maximum character length of the resulting string. Defaults to 40.</param>
   /// <returns>
   /// The abbreviated path, or the original path if it's within the maxLength.
   /// Returns null if the input path is null, empty, or whitespace.
-  /// The returned string will never exceed maxLength.
+  /// The abbreviated path will be exactly maxLength characters long, with ellipses inserted as needed.
   /// </returns>
   public static string? AbbreviatePathForDisplay(string? path, int maxLength = 40)
   {
-    if (string.IsNullOrWhiteSpace(path)) {
-      return null;
-    }
+    path = path?.Trim();
+    if (string.IsNullOrWhiteSpace(path)) return path;
+    if (path.Length <= maxLength) return path;
+    var ellipsis = "...";
+    if(maxLength <= ellipsis.Length) return path[^maxLength..];
 
-    path = path.Trim();
-
-    if (path.Length <= maxLength) {
-      return path;
-    }
-
-    const string ellipsis = "...";
-
-    // Handle cases where maxLength is extremely small
-    if (maxLength <= ellipsis.Length) {
-      // Truncate from the left to preserve the end of the path
-      return path.Substring(path.Length - maxLength);
-    }
-
-    string root = Path.GetPathRoot(path) ?? string.Empty;
-    string filename = Path.GetFileName(path);
-
-    // Handle a path that is just a filename (no directory part)
-    if (root.Length == 0 && filename.Equals(path, StringComparison.Ordinal)) {
-      // The filename is guaranteed to be > maxLength here.
-      // Using string.Concat to cleanly handle the ReadOnlySpan<char> and avoid CS0019.
-      return string.Concat(ellipsis, filename.AsSpan(filename.Length - (maxLength - ellipsis.Length)));
-    }
-
-    // If the root and filename with an ellipsis are already too long, we must abbreviate the filename.
-    // This is a fallback for very long filenames on otherwise short paths.
-    if (root.Length + ellipsis.Length + 1 + filename.Length > maxLength) {
-      return string.Concat(ellipsis, filename.AsSpan(filename.Length - (maxLength - ellipsis.Length)));
-    }
-
-    string? dirPart = Path.GetDirectoryName(path);
-    // If there's no directory part, we've already handled it or it should fit.
-    // This check is for safety.
-    if (string.IsNullOrEmpty(dirPart) || dirPart.Length <= root.Length) {
-      return path;
-    }
-
-    // The core logic starts here. We work with the "middle" part of the path.
-    string middle = dirPart.Substring(root.Length);
-
-    char[] separators = { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
-    var middleComponents = middle.Split(separators, StringSplitOptions.RemoveEmptyEntries);
-
-    var rightBuilder = new StringBuilder(filename);
-
-    // Add directory components from the end of the middle part to the "right" side,
-    // as long as they fit within the maxLength.
-    for (int i = middleComponents.Length - 1; i >= 0; i--) {
-      // Check if adding the next component and a separator would exceed the limit
-      if (root.Length + ellipsis.Length + 1 + middleComponents[i].Length + 1 + rightBuilder.Length > maxLength) {
-        break;
-      }
-
-      // Prepend the separator and the component
-      rightBuilder.Insert(0, separators[0]);
-      rightBuilder.Insert(0, middleComponents[i]);
-    }
-
-    var finalPath = new StringBuilder(root);
-    // For relative paths, the root is empty, so the path will correctly start with "..."
-    if (root.Length > 0) {
-      finalPath.Append(ellipsis);
-      finalPath.Append(separators[0]);
-    } else {
-      finalPath.Append(ellipsis);
-      finalPath.Append(separators[0]);
-    }
-    finalPath.Append(rightBuilder);
-
-    return finalPath.ToString();
+    var leftSegment = (maxLength - ellipsis.Length) / 2;
+    var rightSegment = maxLength - leftSegment - ellipsis.Length;
+    return path[..leftSegment] + ellipsis + path[^rightSegment..];
   }
 
 
