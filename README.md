@@ -4,6 +4,23 @@
 
 It is delivered as a single, self-contained executable with no external .NET runtime dependencies, built for speed and ease of use.
 
+## Table of Contents
+
+* [Key Features](#key-features)
+* [Manifest Format](#manifest-format)
+* [Usage](#usage)
+  * [Common Options](#common-options)
+  * [verify](#verify)
+  * [create](#create)
+  * [add](#add)
+* [Glob Patterns](#glob-patterns)
+* [Output & Exit Codes](#output--exit-codes)
+* [Examples](#examples)
+* [Building from Source](#building-from-source)
+* [Running Tests](#running-tests)
+* [Contributing](#contributing)
+* [License](#license)
+
 ## Key Features
 
 * **High Performance:** Concurrent producer-consumer architecture maximizes throughput, saturating CPU cores and I/O.
@@ -80,49 +97,83 @@ Verity.exe add <manifestPath> [options]
 
 ## Glob Patterns
 
-- Multiple patterns separated by semicolons (`;`).
-- `--include` specifies files to include; `--exclude` specifies files to exclude.
-- Patterns like `*.txt` match files at all levels below the root.
-- Directory globs supported, e.g., `docs/**/*.md` matches all Markdown files in any descendant directory of `docs`.
-- If omitted, all files are included and none are excluded.
+* Multiple patterns separated by semicolons (`;`).
+* `--include` specifies files to include; `--exclude` specifies files to exclude.
+* Patterns like `*.txt` match files at all levels below the root.
+* Directory globs supported, e.g., `docs/**/*.md` matches all Markdown files in any descendant directory of `docs`.
+* If omitted, all files are included and none are excluded.
 
 ---
 
 ## Output & Exit Codes
 
-- **Terminal UI:** Live progress, summary, and diagnostics table.
-- **TSV Report:** Machine-readable error/warning report to file or `stderr`.
-- **Exit Codes:**
-  - `0`: Success (no warnings/errors)
-  - `1`: Warning (warnings, no errors)
+* **Terminal UI:** Live progress, summary, and diagnostics table.
+* **TSV Report:** Machine-readable error/warning report to file or `stderr`.
+* **Exit Codes:**
+  * `0`: Success (no warnings/errors)
+  * `1`: Warning (warnings, no errors)
   - `-1`: Error (errors found)
   - `-2`: Canceled by user
 
 ---
 
+## TSV Report Format
+
+The TSV (Tab-Separated Values) report provides a machine-readable output of all issues (errors and warnings) found during verification. It can be written to a file using the `--tsv-report` option or to `stderr` if no file is specified and issues are detected.
+
+The report has a header row (prefixed with `#`) and data rows.
+
+**Columns:**
+
+| Header         | Description                                                                 |
+|----------------|-----------------------------------------------------------------------------|
+| `Status`       | The status of the verification (`ERROR` or `WARNING`).                        |
+| `File`         | The relative path to the file.                                              |
+| `Details`      | A description of the issue (e.g., `Hash mismatch`, `File not found`).         |
+| `ExpectedHash` | The expected hash from the manifest. This is empty for `File not found` issues. |
+| `ActualHash`   | The actual computed hash of the file. This is empty for `File not found` issues.|
+
+**Example:**
+
+```tsv
+#Status	File	Details	ExpectedHash	ActualHash
+ERROR	data/file1.txt	Hash mismatch	...	...
+WARNING	data/file2.txt	File is newer than manifest	...	...
+ERROR	data/file3.txt	File not found	...	
+```
+
+---
+
+## Examples
+
 ## Examples
 
 **Basic Verification:**
+
 ```
 Verity.exe verify C:\archive\manifest.sha256
 ```
 
 **Using a Different Root Directory:**
+
 ```
 Verity.exe verify C:\temp\manifest.sha256 --root D:\data\backups
 ```
 
 **Creating a Manifest with Globs:**
+
 ```
 Verity.exe create D:\data\backups\manifest.sha256 --root D:\data\backups --include "*.jpg;*.png" --exclude "*.tmp"
 ```
 
 **Writing TSV Report to File:**
+
 ```
 Verity.exe verify C:\archive\manifest.sha256 --tsv-report errors.tsv
 ```
 
 **Adding New Files to a Manifest:**
+
 ```
 Verity.exe add D:\data\backups\manifest.sha256 --root D:\data\newfiles --include "*.docx"
 ```
@@ -140,3 +191,23 @@ Verity.exe add D:\data\backups\manifest.sha256 --root D:\data\newfiles --include
     ```
 
 The native, self-contained executable will be located in `artifacts\Verity-v<version>.zip`.
+
+## Running Tests
+
+To run the unit and integration tests, execute the following command from the root of the repository:
+
+```powershell
+dotnet test
+```
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a pull request or open an issue to discuss your ideas.
+
+When contributing to this repository, please first discuss the change you wish to make via issue, email, or any other method with the owners of this repository before making a change.
+
+Please note we have a code of conduct, please follow it in all your interactions with the project.
+
+## License
+
+This project is licensed under the Unlicense - see the [LICENSE.md](LICENSE.md) file for details.
