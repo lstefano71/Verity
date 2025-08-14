@@ -1,3 +1,7 @@
+using System.IO;
+using Verity.Tests;
+using Xunit;
+
 public class GlobUtilsTests : IDisposable
 {
   private readonly string tempDir;
@@ -88,7 +92,7 @@ public class GlobUtilsTests : IDisposable
   {
     var files = CreateFiles("a.txt", "b.md", "c.log", Path.Combine("subdir", "d.txt"));
     var result = GlobUtils.FilterFiles(files, tempDir, ["*.txt", "subdir/*.txt"], null);
-    Assert.Equal(new[] { "a.txt", Path.Combine("subdir", "d.txt") }.OrderBy(x => x), result.OrderBy(x => x));
+    TestUtils.AssertSetEqual(["a.txt", Path.Combine("subdir", "d.txt")], result);
   }
 
   [Fact]
@@ -96,7 +100,7 @@ public class GlobUtilsTests : IDisposable
   {
     var files = CreateFiles("a.txt", "b.md", "c.log");
     var result = GlobUtils.FilterFiles(files, tempDir, null, ["*.md", "*.log"]);
-    Assert.Equal(new[] { "a.txt" }.OrderBy(x => x), result.OrderBy(x => x));
+    TestUtils.AssertSetEqual(["a.txt"], result);
   }
 
   [Fact]
@@ -104,7 +108,7 @@ public class GlobUtilsTests : IDisposable
   {
     var files = CreateFiles("a.txt", "b.md", "c.log", "d.txt");
     var result = GlobUtils.FilterFiles(files, tempDir, ["*.txt", "*.md"], ["a.txt"]);
-    Assert.Equal(new[] { "b.md", "d.txt" }.OrderBy(x => x), result.OrderBy(x => x));
+    TestUtils.AssertSetEqual(["b.md", "d.txt"], result);
   }
 
   [Fact]
@@ -112,7 +116,7 @@ public class GlobUtilsTests : IDisposable
   {
     var files = CreateFiles("a.txt", "b.md");
     var result = GlobUtils.FilterFiles(files, tempDir, null, null);
-    Assert.Equal(new[] { "a.txt", "b.md" }.OrderBy(x => x), result.OrderBy(x => x));
+    TestUtils.AssertSetEqual(["a.txt", "b.md"], result);
   }
 
   [Fact]
