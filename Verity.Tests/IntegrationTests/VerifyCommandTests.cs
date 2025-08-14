@@ -100,4 +100,18 @@ public class VerifyCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
     rows.Any(row => row.File.Contains("b.log")).Should().BeFalse();
     rows.Any(row => row.File.Contains("a.txt")).Should().BeTrue();
   }
+
+  [Fact]
+  public async Task Verify_ManifestTxt_DefaultsToSha256()
+  {
+    fixture.CreateTestFile("a.txt", "hello");
+    var manifestPath = "manifest.txt";
+    await fixture.RunVerity($"create {manifestPath}");
+    var result = await fixture.RunVerity($"verify {manifestPath}");
+    result.ExitCode.Should().Be(0);
+    var manifestContent = File.ReadAllText(Path.Combine(fixture.TempDir, manifestPath));
+    var expectedHash = fixture.Sha256("hello");
+    manifestContent.Should().Contain(expectedHash);
+  }
 }
+

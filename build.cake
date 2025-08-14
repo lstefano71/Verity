@@ -75,6 +75,10 @@ Task("Build")
     DotNetBuild("./Verity/Verity.csproj", new DotNetBuildSettings {
         Configuration = configuration
     });
+        DotNetBuild("./Verity.Tests/Verity.Tests.csproj", new DotNetBuildSettings {
+        Configuration = configuration
+    });
+
     Information("Project compiled in {0} mode.", configuration);
 });
 

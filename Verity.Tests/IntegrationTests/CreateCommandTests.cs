@@ -5,6 +5,20 @@ public class CreateCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
   public CreateCommandTests(CommonTestFixture fixture) : base(fixture) { }
 
   [Fact]
+  public async Task Create_ManifestTxt_DefaultsToSha256()
+  {
+    fixture.CreateTestFile("a.txt", "hello");
+    var manifestPath = "manifest.txt";
+    var result = await fixture.RunVerity($"create {manifestPath}");
+    result.ExitCode.Should().Be(0);
+
+    var manifestContent = File.ReadAllText(Path.Combine(fixture.TempDir, manifestPath));
+    var expectedHash = fixture.Sha256("hello");
+    manifestContent.Should().Contain(expectedHash);
+    manifestContent.Should().Contain("a.txt");
+  }
+
+  [Fact]
   public async Task Create_BasicCreation()
   {
     fixture.CreateTestFile("a.txt", "hello");

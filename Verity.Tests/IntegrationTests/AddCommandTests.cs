@@ -104,19 +104,6 @@ public class AddCommandTests : CommandTestBase, IClassFixture<CommonTestFixture>
     manifestContent.Should().NotContain("d.txt"); // not in root
   }
 
-  [Fact]
-  public async Task Create_ManifestTxt_DefaultsToSha256()
-  {
-    fixture.CreateTestFile("a.txt", "hello");
-    var manifestPath = "manifest.txt";
-    var result = await fixture.RunVerity($"create {manifestPath}");
-    result.ExitCode.Should().Be(0);
-
-    var manifestContent = File.ReadAllText(Path.Combine(fixture.TempDir, manifestPath));
-    var expectedHash = fixture.Sha256("hello");
-    manifestContent.Should().Contain(expectedHash);
-    manifestContent.Should().Contain("a.txt");
-  }
 
   [Fact]
   public async Task Add_ManifestTxt_DefaultsToSha256()
@@ -134,16 +121,5 @@ public class AddCommandTests : CommandTestBase, IClassFixture<CommonTestFixture>
     manifestContent.Should().Contain("b.txt");
   }
 
-  [Fact]
-  public async Task Verify_ManifestTxt_DefaultsToSha256()
-  {
-    fixture.CreateTestFile("a.txt", "hello");
-    var manifestPath = "manifest.txt";
-    await fixture.RunVerity($"create {manifestPath}");
-    var result = await fixture.RunVerity($"verify {manifestPath}");
-    result.ExitCode.Should().Be(0);
-    var manifestContent = File.ReadAllText(Path.Combine(fixture.TempDir, manifestPath));
-    var expectedHash = fixture.Sha256("hello");
-    manifestContent.Should().Contain(expectedHash);
-  }
+
 }
