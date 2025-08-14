@@ -5,8 +5,8 @@ public static class TsvReportParser
   public static List<TsvReportRow> Parse(string tsvContent)
   {
     var rows = new List<TsvReportRow>();
-    var lines = tsvContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-    var dataLines = lines.Where(l => !l.StartsWith("#"));
+    var lines = tsvContent.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+    var dataLines = lines.Where(l => !l.StartsWith('#'));
     foreach (var line in dataLines) {
       var parts = line.Split('\t');
       if (parts.Length == 5) {

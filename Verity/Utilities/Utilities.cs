@@ -1,8 +1,5 @@
 ﻿using Spectre.Console;
 
-using System.Reflection.Metadata;
-using System.Text;
-
 public static class Utilities
 {
   /// <summary>
@@ -22,7 +19,7 @@ public static class Utilities
     if (string.IsNullOrWhiteSpace(path)) return path;
     if (path.Length <= maxLength) return path;
     var ellipsis = "...";
-    if(maxLength <= ellipsis.Length) return path[^maxLength..];
+    if (maxLength <= ellipsis.Length) return path[^maxLength..];
 
     var leftSegment = (maxLength - ellipsis.Length) / 2;
     var rightSegment = maxLength - leftSegment - ellipsis.Length;

@@ -9,8 +9,8 @@ public class VerifyCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
   {
     var manifestPath = fixture.GetManifestPath("md5");
     File.Exists(manifestPath).Should().BeFalse();
-    var file = fixture.CreateTestFile("a.txt", "hello");
-    var hash = fixture.Md5("hello");
+    _ = fixture.CreateTestFile("a.txt", "hello");
+    var hash = CommonTestFixture.Md5("hello");
     fixture.CreateManifest("md5", (hash, "a.txt"));
     var reportPath = fixture.GetFullPath("report.tsv");
     File.Exists(reportPath).Should().BeFalse();
@@ -26,7 +26,7 @@ public class VerifyCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
   [Fact]
   public async Task Verify_FileNotFound()
   {
-    var hash = fixture.Md5("hello");
+    var hash = CommonTestFixture.Md5("hello");
     fixture.CreateManifest("md5", (hash, "notfound.txt"));
     var manifestPath = fixture.GetManifestPath("md5");
     var reportPath = fixture.GetFullPath("report.tsv");
@@ -73,7 +73,7 @@ public class VerifyCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
   public async Task Verify_UnlistedFile_Warning()
   {
     fixture.CreateTestFile("a.txt", "hello");
-    fixture.CreateManifest("md5", (fixture.Md5("hello"), "a.txt"));
+    fixture.CreateManifest("md5", (CommonTestFixture.Md5("hello"), "a.txt"));
     fixture.CreateTestFile("extra.txt", "extra");
     var manifestPath = fixture.GetManifestPath("md5");
     var reportPath = fixture.GetFullPath("report.tsv");
@@ -110,7 +110,7 @@ public class VerifyCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
     var result = await fixture.RunVerity($"verify {manifestPath}");
     result.ExitCode.Should().Be(0);
     var manifestContent = File.ReadAllText(Path.Combine(fixture.TempDir, manifestPath));
-    var expectedHash = fixture.Sha256("hello");
+    var expectedHash = CommonTestFixture.Sha256("hello");
     manifestContent.Should().Contain(expectedHash);
   }
 }

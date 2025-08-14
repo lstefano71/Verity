@@ -262,7 +262,7 @@ public class Program
       if (files.Count == 0) {
         // Write an empty manifest using ManifestWriter
         using var manifestWriter = new ManifestWriter(options.ChecksumFile);
-        await manifestWriter.WriteAllEntriesAsync(Array.Empty<(string hash, string relativePath)>());
+        await manifestWriter.WriteAllEntriesAsync([]);
         AnsiConsole.MarkupLine("[yellow]No files found in the specified root directory.[/]");
         return 1;
       }

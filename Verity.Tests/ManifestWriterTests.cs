@@ -21,7 +21,7 @@ public class ManifestWriterTests : IDisposable
 
   private string[] ReadManifestLines()
   {
-    return File.Exists(manifestPath) ? File.ReadAllLines(manifestPath) : Array.Empty<string>();
+    return File.Exists(manifestPath) ? File.ReadAllLines(manifestPath) : [];
   }
 
   [Fact]

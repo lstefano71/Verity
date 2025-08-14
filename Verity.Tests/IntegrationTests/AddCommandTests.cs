@@ -27,9 +27,9 @@ public class AddCommandTests : CommandTestBase, IClassFixture<CommonTestFixture>
     var manifestDir = "manifests";
     Directory.CreateDirectory(Path.Combine(fixture.TempDir, manifestDir));
     var manifestPath = Path.Combine(manifestDir, "manifest.md5");
-    var result = await fixture.RunVerity($"create {manifestPath} --root .");
+    _ = await fixture.RunVerity($"create {manifestPath} --root .");
     // Exclude the manifest file itself from being added
-    result = await fixture.RunVerity($"add {manifestPath} --root . --exclude \"manifests/*\"");
+    ProcessResult? result = await fixture.RunVerity($"add {manifestPath} --root . --exclude \"manifests/*\"");
     result.ExitCode.Should().Be(1);
 
     var manifestContent = File.ReadAllText(Path.Combine(fixture.TempDir, manifestPath));
@@ -116,7 +116,7 @@ public class AddCommandTests : CommandTestBase, IClassFixture<CommonTestFixture>
     result.ExitCode.Should().Be(0);
 
     var manifestContent = File.ReadAllText(Path.Combine(fixture.TempDir, manifestPath));
-    var expectedHash = fixture.Sha256("world");
+    var expectedHash = CommonTestFixture.Sha256("world");
     manifestContent.Should().Contain(expectedHash);
     manifestContent.Should().Contain("b.txt");
   }

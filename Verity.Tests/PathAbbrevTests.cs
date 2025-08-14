@@ -1,6 +1,4 @@
 ﻿using FluentAssertions;
-using Xunit;
-using System;
 
 public class AbbreviatePathForDisplayTests
 {
@@ -27,9 +25,9 @@ public class AbbreviatePathForDisplayTests
   }
 
   [Theory]
-  [InlineData("this-is-a-very-long-filename-that-will-not-fit.txt", 
+  [InlineData("this-is-a-very-long-filename-that-will-not-fit.txt",
     20, "this-is-...t-fit.txt")]
-  [InlineData(@"C:\folder\another-very-long-filename-that-will-not-fit.txt", 
+  [InlineData(@"C:\folder\another-very-long-filename-that-will-not-fit.txt",
     30, @"C:\folder\ano...ll-not-fit.txt")]
   public void AbbreviatePath_WhenFilenameIsTooLong_AbbreviatesFilename(string path, int maxLength, string expected)
   {
@@ -39,11 +37,11 @@ public class AbbreviatePathForDisplayTests
   }
 
   [Theory]
-  [InlineData(@"C:\Users\MyUsername\Documents\VeryImportantProject\SourceCode\main.cs", 
+  [InlineData(@"C:\Users\MyUsername\Documents\VeryImportantProject\SourceCode\main.cs",
     46, @"C:\Users\MyUsername\D...ect\SourceCode\main.cs")]
-  [InlineData(@"C:\Users\MyUsername\Documents\VeryImportantProject\SourceCode\main.cs", 
+  [InlineData(@"C:\Users\MyUsername\Documents\VeryImportantProject\SourceCode\main.cs",
     30, @"C:\Users\MyUs...ceCode\main.cs")]
-  [InlineData(@"C:\Users\MyUsername\Documents\VeryImportantProject\SourceCode\main.cs", 
+  [InlineData(@"C:\Users\MyUsername\Documents\VeryImportantProject\SourceCode\main.cs",
     20, @"C:\Users...e\main.cs")]
   public void AbbreviatePath_ForAbsolutePaths_CompactsMiddle(string path, int maxLength, string expected)
   {
@@ -64,11 +62,11 @@ public class AbbreviatePathForDisplayTests
   }
 
   [Theory]
-  [InlineData(@"\\very-long-server-name\very-long-share-name\folderA\folderB\file.log", 
+  [InlineData(@"\\very-long-server-name\very-long-share-name\folderA\folderB\file.log",
     50, @"\\very-long-server-name...folderA\folderB\file.log")]
-  [InlineData(@"\\server\share\a\b\c\d\e\file.txt", 
+  [InlineData(@"\\server\share\a\b\c\d\e\file.txt",
     29, @"\\server\shar...\d\e\file.txt")]
-  [InlineData(@"\\server\share\a\b\c\d\e\file.txt", 
+  [InlineData(@"\\server\share\a\b\c\d\e\file.txt",
     27, @"\\server\sha...d\e\file.txt")]
   public void AbbreviatePath_ForUncPaths_CompactsMiddleAndPreservesRoot(string path, int maxLength, string expected)
   {

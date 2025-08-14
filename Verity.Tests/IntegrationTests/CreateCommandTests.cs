@@ -13,7 +13,7 @@ public class CreateCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
     result.ExitCode.Should().Be(0);
 
     var manifestContent = File.ReadAllText(Path.Combine(fixture.TempDir, manifestPath));
-    var expectedHash = fixture.Sha256("hello");
+    var expectedHash = CommonTestFixture.Sha256("hello");
     manifestContent.Should().Contain(expectedHash);
     manifestContent.Should().Contain("a.txt");
   }
@@ -29,7 +29,7 @@ public class CreateCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
     File.Exists(manifestPath).Should().BeTrue();
     var manifestContent = File.ReadAllText(manifestPath);
     manifestContent.Should().Contain("a.txt");
-    manifestContent.Should().Contain(fixture.Md5("hello"));
+    manifestContent.Should().Contain(CommonTestFixture.Md5("hello"));
   }
 
   [Fact]

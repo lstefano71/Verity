@@ -4,26 +4,26 @@ using Spectre.Console.Testing;
 
 public class ResultsPresenterTests
 {
-  private FinalSummary GetSampleSummary()
+  private static FinalSummary GetSampleSummary()
   {
     var results = new List<VerificationResult>
     {
       // 3 warnings: "Missing metadata"
-      new VerificationResult(
+      new(
         new ChecksumEntry("abc123", "file1.txt"),
         ResultStatus.Warning,
         ActualHash: "abc123",
         Details: "Missing metadata",
         FullPath: "C:/root/file1.txt"
       ),
-      new VerificationResult(
+      new(
         new ChecksumEntry("abc124", "file4.txt"),
         ResultStatus.Warning,
         ActualHash: "abc124",
         Details: "Missing metadata",
         FullPath: "C:/root/file4.txt"
       ),
-      new VerificationResult(
+      new(
         new ChecksumEntry("abc125", "file5.txt"),
         ResultStatus.Warning,
         ActualHash: "abc125",
@@ -31,14 +31,14 @@ public class ResultsPresenterTests
         FullPath: "C:/root/file5.txt"
       ),
       // 2 errors: "Hash mismatch"
-      new VerificationResult(
+      new(
         new ChecksumEntry("def456", "file2.txt"),
         ResultStatus.Error,
         ActualHash: "xyz789",
         Details: "Hash mismatch",
         FullPath: "C:/root/file2.txt"
       ),
-      new VerificationResult(
+      new(
         new ChecksumEntry("def457", "file6.txt"),
         ResultStatus.Error,
         ActualHash: "xyz790",
@@ -46,7 +46,7 @@ public class ResultsPresenterTests
         FullPath: "C:/root/file6.txt"
       ),
       // 1 error: "File not found"
-      new VerificationResult(
+      new(
         new ChecksumEntry("ghi789", "file3.txt"),
         ResultStatus.Error,
         ActualHash: null,

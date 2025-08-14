@@ -73,9 +73,7 @@ public class CommonTestFixture : IAsyncLifetime, IDisposable
     string? exePath = candidatePaths
       .Where(File.Exists)
       .OrderByDescending(File.GetLastWriteTimeUtc)
-      .FirstOrDefault();
-    if (exePath == null)
-      throw new FileNotFoundException($"Verity.exe not found in any candidate location: {string.Join("; ", candidatePaths)}");
+      .FirstOrDefault() ?? throw new FileNotFoundException($"Verity.exe not found in any candidate location: {string.Join("; ", candidatePaths)}");
     var psi = new ProcessStartInfo {
       FileName = exePath,
       Arguments = args,
@@ -118,17 +116,15 @@ public class CommonTestFixture : IAsyncLifetime, IDisposable
     GC.SuppressFinalize(this);
   }
 
-  public string Md5(string input)
+  public static string Md5(string input)
   {
-    using var md5 = System.Security.Cryptography.MD5.Create();
-    var hash = md5.ComputeHash(System.Text.Encoding.UTF8.GetBytes(input));
+    var hash = System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(input));
     return string.Concat(hash.Select(b => b.ToString("x2")));
   }
 
-  public string Sha256(string input)
+  public static string Sha256(string input)
   {
-    using var sha256 = System.Security.Cryptography.SHA256.Create();
-    var hash = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(input));
+    var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(input));
     return string.Concat(hash.Select(b => b.ToString("x2")));
   }
 }
