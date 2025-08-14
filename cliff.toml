@@ -77,7 +77,12 @@ commit_parsers = [
     { message = "^.*", group = "Changes" },
 ]
 
-tag_pattern = "v[0-9]*"
+# Regex to select git tags that represent releases.
+tag_pattern = "v[0-9].*"
+# Regex to select git tags that do not represent proper releases.
+# Takes precedence over `tag_pattern`.
+# Changes belonging to these releases will be included in the next release.
+skip_tags = "beta|alpha"
 
 # Exclude commits that are not matched by any commit parser.
 filter_commits = false
