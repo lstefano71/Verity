@@ -7,6 +7,10 @@ public static class Utilities
   /// <summary>
   /// Abbreviates a file system path for display by replacing middle components with an ellipsis.
   /// This method aims to replicate the behavior seen in Visual Studio's "Recent Files" menu.
+  /// It should start by substituting the middle part of the path with an ellipsis ("...") if the path exceeds the specified maximum length.
+  /// Eroding from the middle allows the path to remain recognizable while fitting within a limited space.
+  /// It should eventually return a string that is no longer than the specified maximum length but is as close as possible to the maximum length.
+  /// The erosion could leave nothing but the rightmost part of the path if the path is too long to even include an ellipsis.
   /// </summary>
   /// <param name="path">The path to abbreviate. The function handles null/whitespace and trims the input.</param>
   /// <param name="maxLength">The maximum character length of the resulting string. Defaults to 40.</param>

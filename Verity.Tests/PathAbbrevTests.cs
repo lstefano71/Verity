@@ -2,6 +2,11 @@
 
 public class AbbreviatePathForDisplayTests
 {
+
+  private static string NormalizePath(string path) => 
+    path.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+  
+
   [Theory]
   [InlineData(null, 40, null)]
   [InlineData("   ", 40, null)]
@@ -22,8 +27,8 @@ public class AbbreviatePathForDisplayTests
   }
 
   [Theory]
-  [InlineData("this-is-a-very-long-filename-that-will-not-fit.txt", 20, "...t-will-not-fit.txt")]
-  [InlineData("C:\\folder\\another-very-long-filename-that-will-not-fit.txt", 30, "...lename-that-will-not-fit.txt")]
+  [InlineData("this-is-a-very-long-filename-that-will-not-fit.txt", 20, "...-will-not-fit.txt")]
+  [InlineData("C:\\folder\\another-very-long-filename-that-will-not-fit.txt", 30, "...ename-that-will-not-fit.txt")]
   public void AbbreviatePath_WhenFilenameIsTooLong_AbbreviatesFilename(string path, int maxLength, string expected)
   {
     var result = Utilities.AbbreviatePathForDisplay(path, maxLength);
@@ -32,9 +37,13 @@ public class AbbreviatePathForDisplayTests
   }
 
   [Theory]
-  [InlineData("C:\\Users\\MyUsername\\Documents\\VeryImportantProject\\SourceCode\\main.cs", 40, "C:\\...\\VeryImportantProject\\SourceCode\\main.cs")]
-  [InlineData("C:\\Users\\MyUsername\\Documents\\VeryImportantProject\\SourceCode\\main.cs", 30, "C:\\...\\SourceCode\\main.cs")]
-  [InlineData("C:\\Users\\MyUsername\\Documents\\VeryImportantProject\\SourceCode\\main.cs", 20, "C:\\...\\main.cs")]
+
+  [InlineData("C:\\Users\\MyUsername\\Documents\\VeryImportantProject\\SourceCode\\main.cs", 46, 
+    "C:\\...\\VeryImportantProject\\SourceCode\\main.cs")]
+  [InlineData("C:\\Users\\MyUsername\\Documents\\VeryImportantProject\\SourceCode\\main.cs", 30, 
+    "C:\\...\\SourceCode\\main.cs")]
+  [InlineData("C:\\Users\\MyUsername\\Documents\\VeryImportantProject\\SourceCode\\main.cs", 20, 
+    "C:\\...\\main.cs")]
   public void AbbreviatePath_ForAbsolutePaths_CompactsMiddle(string path, int maxLength, string expected)
   {
     string expectedNormalized = expected.Replace('\\', Path.DirectorySeparatorChar);
@@ -57,12 +66,10 @@ public class AbbreviatePathForDisplayTests
   }
 
   [Theory]
-  [InlineData("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/file.txt", 30, "a/b/c/d/e/f/g/h/.../p/file.txt")]
-  [InlineData("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/file.txt", 20, "a/b/.../p/file.txt")]
-  [InlineData("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/file.txt", 15, ".../p/file.txt")]
-  [InlineData("\\\\very-long-server-name\\very-long-share-name\\folderA\\folderB\\file.log", 50, "\\\\very-long-server-name\\...\\folderB\\file.log")]
-  [InlineData("\\\\server\\share\\a\\b\\c\\d\\e\\file.txt", 25, "\\\\server\\share\\...\\e\\file.txt")]
-  [InlineData("\\\\server\\share\\a\\b\\c\\d\\e\\file.txt", 18, "\\\\server\\share\\...\\file.txt")]
+  [InlineData("\\\\very-long-server-name\\very-long-share-name\\folderA\\folderB\\file.log", 50, 
+    "\\\\very-long-server-name\\...\\folderB\\file.log")]
+  [InlineData("\\\\server\\share\\a\\b\\c\\d\\e\\file.txt", 29, "\\\\server\\share\\...\\e\\file.txt")]
+  [InlineData("\\\\server\\share\\a\\b\\c\\d\\e\\file.txt", 27, "\\\\server\\share\\...\\file.txt")]
   public void AbbreviatePath_ForUncPaths_CompactsMiddleAndPreservesRoot(string path, int maxLength, string expected)
   {
     string expectedNormalized = expected.Replace('\\', Path.DirectorySeparatorChar);
@@ -70,6 +77,21 @@ public class AbbreviatePathForDisplayTests
     result.Should().Be(expectedNormalized);
     result?.Length.Should().BeLessThanOrEqualTo(maxLength);
   }
+
+
+  [Theory]
+  [InlineData("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/file.txt", 30, "a/b/c/d/e/f/g/h/.../p/file.txt")]
+  [InlineData("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/file.txt", 20, "a/b/.../p/file.txt")]
+  [InlineData("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/file.txt", 15, ".../p/file.txt")]
+  [InlineData("a\\b\\c\\d\\e\\f\\g\\h\\i\\j\\k\\l\\m\\n\\o\\p\\file.txt", 15, "...\\p\\file.txt")]
+  public void AbbreviatePath_CompactsMiddle(string path, int maxLength, string expected)
+  {
+    string expectedNormalized = NormalizePath(expected);
+    var result = Utilities.AbbreviatePathForDisplay(path, maxLength);
+    result.Should().Be(expectedNormalized);
+    result?.Length.Should().BeLessThanOrEqualTo(maxLength);
+  }
+
 
   [Theory]
   [InlineData("a-long-path-that-will-be-truncated-entirely.txt", 3, "txt")]
