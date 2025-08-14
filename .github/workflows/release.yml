@@ -5,6 +5,8 @@ on:
     branches:
       - main
       - 'feature/**'
+      - 'v*'
+      - 'bugfix/'
 
 jobs:
   # JOB 1: Build on Windows (This job remains unchanged)
