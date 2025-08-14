@@ -25,7 +25,7 @@ body = """
     {% for commit in commits %}
         - ([{{ commit.id | truncate(length=7, end="") }}]($REPO/commit/{{ commit.id }})) - {{ commit.author.name }} - {{ commit.message | split(pat="\n") | first | upper_first | trim }} \
   {% if commit.footers %}\
-    {% for footer in commit.footers -%}
+    {% for footer in commit.footers -%}\
         , {{ footer.token }}{{ footer.separator }}{{ footer.value }}\
     {% endfor %}\
   {% endif %}
