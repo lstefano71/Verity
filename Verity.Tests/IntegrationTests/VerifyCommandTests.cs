@@ -1,5 +1,3 @@
-using FluentAssertions;
-
 public class VerifyCommandTests : CommandTestBase, IClassFixture<CommonTestFixture>
 {
   public VerifyCommandTests(CommonTestFixture fixture) : base(fixture) { }
@@ -8,19 +6,19 @@ public class VerifyCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
   public async Task Verify_Success()
   {
     var manifestPath = fixture.GetManifestPath("md5");
-    File.Exists(manifestPath).Should().BeFalse();
+    Assert.False(File.Exists(manifestPath));
     _ = fixture.CreateTestFile("a.txt", "hello");
     var hash = CommonTestFixture.Md5("hello");
     fixture.CreateManifest("md5", (hash, "a.txt"));
     var reportPath = fixture.GetFullPath("report.tsv");
-    File.Exists(reportPath).Should().BeFalse();
+    Assert.False(File.Exists(reportPath));
     var result = await fixture.RunVerity("verify manifest.md5 --tsv-report report.tsv");
-    result.ExitCode.Should().Be(0);
-    result.StdErr.Should().BeEmpty();
-    File.Exists(reportPath).Should().BeTrue();
+    Assert.Equal(0, result.ExitCode);
+    Assert.Empty(result.StdErr);
+    Assert.True(File.Exists(reportPath));
     // Verify the report is empty since everything is valid
     var rows = TsvReportParser.Parse(File.ReadAllText(reportPath));
-    rows.Should().BeEmpty();
+    Assert.Empty(rows);
   }
 
   [Fact]
@@ -31,11 +29,11 @@ public class VerifyCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
     var manifestPath = fixture.GetManifestPath("md5");
     var reportPath = fixture.GetFullPath("report.tsv");
     var result = await fixture.RunVerity("verify manifest.md5 --tsv-report report.tsv");
-    result.ExitCode.Should().Be(-1);
-    result.StdErr.Should().BeEmpty();
-    File.Exists(reportPath).Should().BeTrue();
+    Assert.Equal(-1, result.ExitCode);
+    Assert.Empty(result.StdErr);
+    Assert.True(File.Exists(reportPath));
     var rows = TsvReportParser.Parse(File.ReadAllText(reportPath));
-    rows.Any(row => row.Status == "ERROR").Should().BeTrue();
+    Assert.True(rows.Any(row => row.Status == "ERROR"));
   }
 
   [Fact]
@@ -46,11 +44,11 @@ public class VerifyCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
     var manifestPath = fixture.GetManifestPath("md5");
     var reportPath = fixture.GetFullPath("report.tsv");
     var result = await fixture.RunVerity("verify manifest.md5 --tsv-report report.tsv");
-    result.ExitCode.Should().Be(-1);
-    result.StdErr.Should().BeEmpty();
-    File.Exists(reportPath).Should().BeTrue();
+    Assert.Equal(-1, result.ExitCode);
+    Assert.Empty(result.StdErr);
+    Assert.True(File.Exists(reportPath));
     var rows = TsvReportParser.Parse(File.ReadAllText(reportPath));
-    rows.Any(row => row.Status == "ERROR").Should().BeTrue();
+    Assert.True(rows.Any(row => row.Status == "ERROR"));
   }
 
   [Fact]
@@ -62,11 +60,11 @@ public class VerifyCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
     var manifestPath = fixture.GetManifestPath("md5");
     var reportPath = fixture.GetFullPath("report.tsv");
     var result = await fixture.RunVerity("verify manifest.md5 --tsv-report report.tsv");
-    result.ExitCode.Should().Be(1);
-    result.StdErr.Should().BeEmpty();
-    File.Exists(reportPath).Should().BeTrue();
+    Assert.Equal(1, result.ExitCode);
+    Assert.Empty(result.StdErr);
+    Assert.True(File.Exists(reportPath));
     var rows = TsvReportParser.Parse(File.ReadAllText(reportPath));
-    rows.Any(row => row.Status == "WARNING").Should().BeTrue();
+    Assert.True(rows.Any(row => row.Status == "WARNING"));
   }
 
   [Fact]
@@ -78,13 +76,13 @@ public class VerifyCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
     var manifestPath = fixture.GetManifestPath("md5");
     var reportPath = fixture.GetFullPath("report.tsv");
     var result = await fixture.RunVerity("verify manifest.md5 --tsv-report report.tsv");
-    result.ExitCode.Should().Be(1);
+    Assert.Equal(1, result.ExitCode);
     // Accept -1 if any error is present, otherwise 1 for warning only
-    (result.ExitCode == 1 || result.ExitCode == -1).Should().BeTrue();
-    result.StdErr.Should().BeEmpty();
-    File.Exists(reportPath).Should().BeTrue();
+    Assert.True(result.ExitCode == 1 || result.ExitCode == -1);
+    Assert.Empty(result.StdErr);
+    Assert.True(File.Exists(reportPath));
     var rows = TsvReportParser.Parse(File.ReadAllText(reportPath));
-    rows.Any(row => row.Status == "WARNING").Should().BeTrue();
+    Assert.True(rows.Any(row => row.Status == "WARNING"));
   }
 
   [Fact]
@@ -97,8 +95,8 @@ public class VerifyCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
     var reportPath = fixture.GetFullPath("report.tsv");
     var result = await fixture.RunVerity("verify manifest.md5 --include \"*.txt\" --tsv-report report.tsv");
     var rows = TsvReportParser.Parse(File.ReadAllText(reportPath));
-    rows.Any(row => row.File.Contains("b.log")).Should().BeFalse();
-    rows.Any(row => row.File.Contains("a.txt")).Should().BeTrue();
+    Assert.False(rows.Any(row => row.File.Contains("b.log")));
+    Assert.True(rows.Any(row => row.File.Contains("a.txt")));
   }
 
   [Fact]
@@ -108,10 +106,10 @@ public class VerifyCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
     var manifestPath = "manifest.txt";
     await fixture.RunVerity($"create {manifestPath}");
     var result = await fixture.RunVerity($"verify {manifestPath}");
-    result.ExitCode.Should().Be(0);
+    Assert.Equal(0, result.ExitCode);
     var manifestContent = File.ReadAllText(Path.Combine(fixture.TempDir, manifestPath));
     var expectedHash = CommonTestFixture.Sha256("hello");
-    manifestContent.Should().Contain(expectedHash);
+    Assert.Contains(expectedHash, manifestContent);
   }
 }
 

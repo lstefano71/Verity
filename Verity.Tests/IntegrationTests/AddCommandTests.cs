@@ -1,5 +1,3 @@
-using FluentAssertions;
-
 public class AddCommandTests : CommandTestBase, IClassFixture<CommonTestFixture>
 {
   public AddCommandTests(CommonTestFixture fixture) : base(fixture) { }
@@ -11,12 +9,12 @@ public class AddCommandTests : CommandTestBase, IClassFixture<CommonTestFixture>
     await fixture.RunVerity("create manifest.md5");
     fixture.CreateTestFile("b.txt", "world");
     var result = await fixture.RunVerity("add manifest.md5");
-    result.ExitCode.Should().Be(0);
+    Assert.Equal(0, result.ExitCode);
 
     var manifestPath = fixture.GetManifestPath("md5");
     var manifestContent = File.ReadAllText(manifestPath);
-    manifestContent.Should().Contain("a.txt");
-    manifestContent.Should().Contain("b.txt");
+    Assert.Contains("a.txt", manifestContent);
+    Assert.Contains("b.txt", manifestContent);
   }
 
   [Fact]
@@ -30,11 +28,11 @@ public class AddCommandTests : CommandTestBase, IClassFixture<CommonTestFixture>
     _ = await fixture.RunVerity($"create {manifestPath} --root .");
     // Exclude the manifest file itself from being added
     ProcessResult? result = await fixture.RunVerity($"add {manifestPath} --root . --exclude \"manifests/*\"");
-    result.ExitCode.Should().Be(1);
+    Assert.Equal(1, result.ExitCode);
 
     var manifestContent = File.ReadAllText(Path.Combine(fixture.TempDir, manifestPath));
-    manifestContent.Should().Contain("a.txt");
-    manifestContent.Should().NotContain(manifestPath.Replace('\\', '/'));
+    Assert.Contains("a.txt", manifestContent);
+    Assert.DoesNotContain(manifestPath.Replace('\\', '/'), manifestContent);
   }
 
   [Fact]
@@ -47,14 +45,14 @@ public class AddCommandTests : CommandTestBase, IClassFixture<CommonTestFixture>
     fixture.CreateTestFile("b.log", "log");
     fixture.CreateTestFile("c.txt", "extra");
     var result = await fixture.RunVerity("add manifest.md5 --include \"*.log\"");
-    result.ExitCode.Should().Be(0);
+    Assert.Equal(0, result.ExitCode);
 
     var manifestPath = fixture.GetManifestPath("md5");
     var manifestContent = File.ReadAllText(manifestPath);
     // The manifest should contain the original file and the new file matching the glob
-    manifestContent.Should().Contain("a.txt"); // original entry remains
-    manifestContent.Should().Contain("b.log"); // new entry added
-    manifestContent.Should().NotContain("c.txt"); // not added, not present
+    Assert.Contains("a.txt", manifestContent); // original entry remains
+    Assert.Contains("b.log", manifestContent); // new entry added
+    Assert.DoesNotContain("c.txt", manifestContent); // not added, not present
   }
 
   [Fact]
@@ -67,14 +65,14 @@ public class AddCommandTests : CommandTestBase, IClassFixture<CommonTestFixture>
     fixture.CreateTestFile("b.log", "log");
     fixture.CreateTestFile("c.txt", "extra");
     var result = await fixture.RunVerity("add manifest.md5 --exclude \"*.log\"");
-    result.ExitCode.Should().Be(0);
+    Assert.Equal(0, result.ExitCode);
 
     var manifestPath = fixture.GetManifestPath("md5");
     var manifestContent = File.ReadAllText(manifestPath);
     // The manifest should contain the original file and the new file not matching the exclude glob
-    manifestContent.Should().Contain("a.txt"); // original entry remains
-    manifestContent.Should().Contain("c.txt"); // new entry added
-    manifestContent.Should().NotContain("b.log"); // excluded, not present
+    Assert.Contains("a.txt", manifestContent); // original entry remains
+    Assert.Contains("c.txt", manifestContent); // new entry added
+    Assert.DoesNotContain("b.log", manifestContent); // excluded, not present
   }
 
   [Fact]
@@ -89,19 +87,19 @@ public class AddCommandTests : CommandTestBase, IClassFixture<CommonTestFixture>
     // Create manifest in root, only for a.txt
     var manifestPath = fixture.GetManifestPath("md5");
     var result = await fixture.RunVerity($"create manifest.md5 --include \"{subDir}/*\"");
-    result.ExitCode.Should().Be(0);
+    Assert.Equal(0, result.ExitCode);
 
     // Add new files from subdir only
     fixture.CreateTestFile(Path.Combine(subDir, "c.txt"), "extra");
     fixture.CreateTestFile("d.txt", "other"); // Should not be added
     result = await fixture.RunVerity($"add manifest.md5 --root {subDir}");
-    result.ExitCode.Should().Be(0);
+    Assert.Equal(0, result.ExitCode);
 
     var manifestContent = File.ReadAllText(manifestPath);
-    manifestContent.Should().Contain("a.txt"); // original entry
-    manifestContent.Should().Contain("c.txt"); // new entry from subdir
-    manifestContent.Should().NotContain("b.txt"); // not in root
-    manifestContent.Should().NotContain("d.txt"); // not in root
+    Assert.Contains("a.txt", manifestContent); // original entry
+    Assert.Contains("c.txt", manifestContent); // new entry from subdir
+    Assert.DoesNotContain("b.txt", manifestContent); // not in root
+    Assert.DoesNotContain("d.txt", manifestContent); // not in root
   }
 
 
@@ -113,12 +111,12 @@ public class AddCommandTests : CommandTestBase, IClassFixture<CommonTestFixture>
     await fixture.RunVerity($"create {manifestPath}");
     fixture.CreateTestFile("b.txt", "world");
     var result = await fixture.RunVerity($"add {manifestPath}");
-    result.ExitCode.Should().Be(0);
+    Assert.Equal(0, result.ExitCode);
 
     var manifestContent = File.ReadAllText(Path.Combine(fixture.TempDir, manifestPath));
     var expectedHash = CommonTestFixture.Sha256("world");
-    manifestContent.Should().Contain(expectedHash);
-    manifestContent.Should().Contain("b.txt");
+    Assert.Contains(expectedHash, manifestContent);
+    Assert.Contains("b.txt", manifestContent);
   }
 
 

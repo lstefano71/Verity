@@ -1,5 +1,3 @@
-using FluentAssertions;
-
 public class ManifestReaderTests : IDisposable
 {
   private readonly string tempDir;
@@ -38,9 +36,9 @@ public class ManifestReaderTests : IDisposable
   {
     var line = "abc123\tfile.txt";
     var entry = ManifestReader.ParseLine(line);
-    entry.Should().NotBeNull();
-    entry!.Hash.Should().Be("abc123");
-    entry.RelativePath.Should().Be("file.txt");
+    Assert.NotNull(entry);
+    Assert.Equal("abc123", entry!.Hash);
+    Assert.Equal("file.txt", entry.RelativePath);
   }
 
   [Theory]
@@ -50,7 +48,7 @@ public class ManifestReaderTests : IDisposable
   [InlineData("\tfile.txt")]
   public void ParseLine_WithMalformedLine_ReturnsNull(string line)
   {
-    ManifestReader.ParseLine(line).Should().BeNull();
+    Assert.Null(ManifestReader.ParseLine(line));
   }
 
   [Theory]
@@ -59,7 +57,7 @@ public class ManifestReaderTests : IDisposable
   [InlineData("\t")]
   public void ParseLine_WithEmptyOrWhitespaceLine_ReturnsNull(string line)
   {
-    ManifestReader.ParseLine(line).Should().BeNull();
+    Assert.Null(ManifestReader.ParseLine(line));
   }
 
   [Fact]
@@ -67,9 +65,9 @@ public class ManifestReaderTests : IDisposable
   {
     var line = "abc123\tfile.txt\tignored\tmore";
     var entry = ManifestReader.ParseLine(line);
-    entry.Should().NotBeNull();
-    entry!.Hash.Should().Be("abc123");
-    entry.RelativePath.Should().Be("file.txt");
+    Assert.NotNull(entry);
+    Assert.Equal("abc123", entry!.Hash);
+    Assert.Equal("file.txt", entry.RelativePath);
   }
 
   [Fact]
@@ -77,9 +75,9 @@ public class ManifestReaderTests : IDisposable
   {
     var line = "юникод\tфайл.txt";
     var entry = ManifestReader.ParseLine(line);
-    entry.Should().NotBeNull();
-    entry!.Hash.Should().Be("юникод");
-    entry.RelativePath.Should().Be("файл.txt");
+    Assert.NotNull(entry);
+    Assert.Equal("юникод", entry!.Hash);
+    Assert.Equal("файл.txt", entry.RelativePath);
   }
 
   [Fact]
@@ -91,11 +89,11 @@ public class ManifestReaderTests : IDisposable
     );
     var reader = new ManifestReader(new FileInfo(manifestPath), new DirectoryInfo(tempDir));
     var entries = await reader.ReadEntriesAsync(CancellationToken.None);
-    entries.Should().HaveCount(2);
-    entries[0]!.Hash.Should().Be("hash1");
-    entries[0]!.RelativePath.Should().Be("file1.txt");
-    entries[1]!.Hash.Should().Be("hash2");
-    entries[1]!.RelativePath.Should().Be("file2.txt");
+    Assert.Equal(2, entries.Count);
+    Assert.Equal("hash1", entries[0]!.Hash);
+    Assert.Equal("file1.txt", entries[0]!.RelativePath);
+    Assert.Equal("hash2", entries[1]!.Hash);
+    Assert.Equal("file2.txt", entries[1]!.RelativePath);
   }
 
   [Fact]
@@ -107,7 +105,7 @@ public class ManifestReaderTests : IDisposable
     );
     var reader = new ManifestReader(new FileInfo(manifestPath), new DirectoryInfo(tempDir));
     var count = await reader.GetFileCountAsync(CancellationToken.None);
-    count.Should().Be(2);
+    Assert.Equal(2, count);
   }
 
   [Fact]
@@ -121,6 +119,6 @@ public class ManifestReaderTests : IDisposable
     CreateFile("file2.txt", "defgh"); // 5 bytes
     var reader = new ManifestReader(new FileInfo(manifestPath), new DirectoryInfo(tempDir));
     var totalBytes = await reader.GetTotalBytesAsync(CancellationToken.None);
-    totalBytes.Should().Be(8);
+    Assert.Equal(8, totalBytes);
   }
 }

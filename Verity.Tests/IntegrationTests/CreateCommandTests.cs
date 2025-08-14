@@ -1,5 +1,3 @@
-using FluentAssertions;
-
 public class CreateCommandTests : CommandTestBase, IClassFixture<CommonTestFixture>
 {
   public CreateCommandTests(CommonTestFixture fixture) : base(fixture) { }
@@ -10,12 +8,12 @@ public class CreateCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
     fixture.CreateTestFile("a.txt", "hello");
     var manifestPath = "manifest.txt";
     var result = await fixture.RunVerity($"create {manifestPath}");
-    result.ExitCode.Should().Be(0);
+    Assert.Equal(0, result.ExitCode);
 
     var manifestContent = File.ReadAllText(Path.Combine(fixture.TempDir, manifestPath));
     var expectedHash = CommonTestFixture.Sha256("hello");
-    manifestContent.Should().Contain(expectedHash);
-    manifestContent.Should().Contain("a.txt");
+    Assert.Contains(expectedHash, manifestContent);
+    Assert.Contains("a.txt", manifestContent);
   }
 
   [Fact]
@@ -25,11 +23,11 @@ public class CreateCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
     var manifestPath = fixture.GetManifestPath("md5");
     if (File.Exists(manifestPath)) File.Delete(manifestPath);
     var result = await fixture.RunVerity("create manifest.md5");
-    result.ExitCode.Should().Be(0);
-    File.Exists(manifestPath).Should().BeTrue();
+    Assert.Equal(0, result.ExitCode);
+    Assert.True(File.Exists(manifestPath));
     var manifestContent = File.ReadAllText(manifestPath);
-    manifestContent.Should().Contain("a.txt");
-    manifestContent.Should().Contain(CommonTestFixture.Md5("hello"));
+    Assert.Contains("a.txt", manifestContent);
+    Assert.Contains(CommonTestFixture.Md5("hello"), manifestContent);
   }
 
   [Fact]
@@ -37,18 +35,18 @@ public class CreateCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
   {
     var manifestPath = fixture.GetManifestPath("md5");
     if (File.Exists(manifestPath)) File.Delete(manifestPath);
-    File.Exists(manifestPath).Should().BeFalse();
+    Assert.False(File.Exists(manifestPath));
     var reportPath = fixture.GetFullPath("report.tsv");
     if (File.Exists(reportPath)) File.Delete(manifestPath);
-    File.Exists(manifestPath).Should().BeFalse();
+    Assert.False(File.Exists(manifestPath));
     var manifestDir = Path.GetDirectoryName(manifestPath)!;
-    Directory.Exists(manifestDir).Should().BeTrue();
-    Directory.GetFiles(manifestDir).Should().BeEmpty();
+    Assert.True(Directory.Exists(manifestDir));
+    Assert.Empty(Directory.GetFiles(manifestDir));
     var result = await fixture.RunVerity("create manifest.md5 --tsv-report report.tsv");
-    result.ExitCode.Should().Be(1);
-    File.Exists(manifestPath).Should().BeTrue();
-    File.ReadAllText(manifestPath).Should().BeEmpty();
-    File.Exists(reportPath).Should().BeFalse();
+    Assert.Equal(1, result.ExitCode);
+    Assert.True(File.Exists(manifestPath));
+    Assert.Empty(File.ReadAllText(manifestPath));
+    Assert.False(File.Exists(reportPath));
   }
 
   [Fact]
@@ -60,11 +58,11 @@ public class CreateCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
     var manifestPath = fixture.GetManifestPath("md5");
     if (File.Exists(manifestPath)) File.Delete(manifestPath);
     var result = await fixture.RunVerity("create manifest.md5 --include \"*.txt;*.log\" --exclude \"*.tmp\"");
-    result.ExitCode.Should().Be(0);
+    Assert.Equal(0, result.ExitCode);
     var manifestContent = File.ReadAllText(manifestPath);
-    manifestContent.Should().Contain("a.txt");
-    manifestContent.Should().Contain("b.log");
-    manifestContent.Should().NotContain("c.tmp");
+    Assert.Contains("a.txt", manifestContent);
+    Assert.Contains("b.log", manifestContent);
+    Assert.DoesNotContain("c.tmp", manifestContent);
   }
 
   [Fact]
@@ -80,10 +78,10 @@ public class CreateCommandTests : CommandTestBase, IClassFixture<CommonTestFixtu
     var manifestPath = fixture.GetManifestPath("md5");
     if (File.Exists(manifestPath)) File.Delete(manifestPath);
     var result = await fixture.RunVerity($"create manifest.md5 --root {subDir}");
-    result.ExitCode.Should().Be(0);
-    File.Exists(manifestPath).Should().BeTrue();
+    Assert.Equal(0, result.ExitCode);
+    Assert.True(File.Exists(manifestPath));
     var manifestContent = File.ReadAllText(manifestPath);
-    manifestContent.Should().Contain("a.txt");
-    manifestContent.Should().NotContain("b.txt");
+    Assert.Contains("a.txt", manifestContent);
+    Assert.DoesNotContain("b.txt", manifestContent);
   }
 }

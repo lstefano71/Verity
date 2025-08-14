@@ -1,5 +1,3 @@
-using FluentAssertions;
-
 using Spectre.Console.Testing;
 
 public class ResultsPresenterTests
@@ -85,7 +83,7 @@ public class ResultsPresenterTests
       "Throughput"
     };
     foreach (var label in expectedLabels)
-      output.Should().Contain(label, $"Label '{label}' not found");
+      Assert.Contains(label, output);
 
     // Assert the output contains the expected warning/error details
     var expectedDetails = new[] {
@@ -94,7 +92,7 @@ public class ResultsPresenterTests
       "File not found"
     };
     foreach (var detail in expectedDetails)
-      output.Should().Contain(detail, $"Detail '{detail}' not found");
+      Assert.Contains(detail, output);
 
     // Assert the order of summary labels
     var orderLabels = new[] {
@@ -109,7 +107,7 @@ public class ResultsPresenterTests
     var lastIndex = -1;
     foreach (var label in orderLabels) {
       var idx = output.IndexOf(label);
-      idx.Should().BeGreaterThan(lastIndex, $"Label '{label}' is out of order");
+      Assert.True(idx > lastIndex);
       lastIndex = idx;
     }
 
@@ -122,7 +120,7 @@ public class ResultsPresenterTests
     lastIndex = -1;
     foreach (var detail in detailsOrder) {
       var idx = output.IndexOf(detail);
-      idx.Should().BeGreaterThan(lastIndex, $"Detail '{detail}' is out of order");
+      Assert.True(idx > lastIndex);
       lastIndex = idx;
     }
   }
@@ -146,11 +144,11 @@ public class ResultsPresenterTests
       "Actual Hash"
     };
     foreach (var header in expectedHeaders)
-      output.Should().Contain(header, $"Header '{header}' not found");
+      Assert.Contains(header, output);
 
     // Assert the output contains expected status values
-    output.Should().Contain("Warning", "Warning status not found");
-    output.Should().Contain("Error", "Error status not found");
+    Assert.Contains("Warning", output);
+    Assert.Contains("Error", output);
 
     // Assert the output contains expected details and file names
     var expectedDetails = new[] {
@@ -159,7 +157,7 @@ public class ResultsPresenterTests
       "File not found"
     };
     foreach (var detail in expectedDetails)
-      output.Should().Contain(detail, $"Detail '{detail}' not found");
+      Assert.Contains(detail, output);
 
     var expectedFiles = new[] {
       "file1.txt",
@@ -167,7 +165,7 @@ public class ResultsPresenterTests
       "file3.txt"
     };
     foreach (var file in expectedFiles)
-      output.Should().Contain(file, $"File '{file}' not found");
+      Assert.Contains(file, output);
 
     // Assert the order of table headers
     var orderHeaders = new[] {
@@ -180,7 +178,7 @@ public class ResultsPresenterTests
     var lastIndex = output.IndexOf("Diagnostic Report");
     foreach (var header in orderHeaders) {
       var idx = output.IndexOf(header);
-      idx.Should().BeGreaterThan(lastIndex, $"Header '{header}' is out of order");
+      Assert.True(idx > lastIndex);
       lastIndex = idx;
     }
   }
@@ -193,16 +191,16 @@ public class ResultsPresenterTests
     try {
       await ResultsPresenter.WriteErrorReportAsync(summary, new FileInfo(tempFile));
       var report = await File.ReadAllTextAsync(tempFile);
-      report.Should().Contain("Status");
-      report.Should().Contain("File");
-      report.Should().Contain("Details");
-      report.Should().Contain("ExpectedHash");
-      report.Should().Contain("ActualHash");
-      report.Should().Contain("WARNING");
-      report.Should().Contain("ERROR");
-      report.Should().Contain("Missing metadata");
-      report.Should().Contain("Hash mismatch");
-      report.Should().Contain("File not found");
+      Assert.Contains("Status", report);
+      Assert.Contains("File", report);
+      Assert.Contains("Details", report);
+      Assert.Contains("ExpectedHash", report);
+      Assert.Contains("ActualHash", report);
+      Assert.Contains("WARNING", report);
+      Assert.Contains("ERROR", report);
+      Assert.Contains("Missing metadata", report);
+      Assert.Contains("Hash mismatch", report);
+      Assert.Contains("File not found", report);
     } finally {
       File.Delete(tempFile);
     }

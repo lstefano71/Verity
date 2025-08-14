@@ -3,7 +3,7 @@
 #### **1. Guiding Principles & Technology Stack**
 
 * **Test Framework:** **xUnit** will be used as the primary test framework. It is modern, flexible, and well-supported in the .NET ecosystem.
-* **Assertion Library:** **FluentAssertions** will be used for more readable and expressive test assertions (e.g., `result.Should().Be(5)`).
+* **Assertion Library:** **xUnit.Assert** will be used for test assertions (e.g., `Assert.Equal(5, result)`).
 * **Mocking Library:** **NSubstitute** will be used for creating mocks and stubs when isolating components for unit tests. It is known for its simple and clean syntax.
 * **Separation of Concerns:**
   * **Unit Tests** will focus on individual methods and classes in isolation, without accessing the file system or external processes. They will be fast and numerous.
@@ -24,8 +24,8 @@
     * Run the following commands:
 
         ```shell
-        dotnet add package FluentAssertions
-        dotnet add package NSubstitute
+        
+        
         ```
 
 #### **3. Phase 2: Unit Test Implementation**

@@ -1,5 +1,3 @@
-using FluentAssertions;
-
 public class ManifestWriterTests : IDisposable
 {
   private readonly string tempDir;
@@ -31,7 +29,8 @@ public class ManifestWriterTests : IDisposable
     await writer.WriteEntryAsync("hash1", "file1.txt");
     writer.Dispose();
     var lines = ReadManifestLines();
-    lines.Should().ContainSingle().Which.Should().Be("hash1\tfile1.txt");
+    Assert.Single(lines);
+    Assert.Equal("hash1\tfile1.txt", lines[0]);
   }
 
   [Fact]
@@ -45,9 +44,9 @@ public class ManifestWriterTests : IDisposable
     await writer.WriteAllEntriesAsync(entries);
     writer.Dispose();
     var lines = ReadManifestLines();
-    lines.Should().HaveCount(2);
-    lines[0].Should().Be("hash1\tfile1.txt");
-    lines[1].Should().Be("hash2\tfile2.txt");
+    Assert.Equal(2, lines.Length);
+    Assert.Equal("hash1\tfile1.txt", lines[0]);
+    Assert.Equal("hash2\tfile2.txt", lines[1]);
   }
 
   [Fact]
@@ -58,8 +57,8 @@ public class ManifestWriterTests : IDisposable
     await writer.WriteEntryAsync("hash2", "file2.txt");
     writer.Dispose();
     var lines = ReadManifestLines();
-    lines.Should().HaveCount(2);
-    lines[0].Should().Be("hash1\tfile1.txt");
-    lines[1].Should().Be("hash2\tfile2.txt");
+    Assert.Equal(2, lines.Length);
+    Assert.Equal("hash1\tfile1.txt", lines[0]);
+    Assert.Equal("hash2\tfile2.txt", lines[1]);
   }
 }

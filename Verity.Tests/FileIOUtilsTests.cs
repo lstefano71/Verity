@@ -1,5 +1,3 @@
-using FluentAssertions;
-
 using Verity.Utilities;
 
 public class FileIOUtilsTests
@@ -13,6 +11,7 @@ public class FileIOUtilsTests
   public void GetOptimalBufferSize_ReturnsExpected(int fileSize, int expectedBufferSize)
   {
     var result = FileIOUtils.GetOptimalBufferSize(fileSize);
-    result.Should().Be(expectedBufferSize);
+    Assert.Equal(expectedBufferSize, result);
   }
 }
+

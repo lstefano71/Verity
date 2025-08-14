@@ -1,6 +1,4 @@
-﻿using FluentAssertions;
-
-public class AbbreviatePathForDisplayTests
+﻿public class AbbreviatePathForDisplayTests
 {
   // These test cases were already correct.
   [Theory]
@@ -9,7 +7,7 @@ public class AbbreviatePathForDisplayTests
   public void AbbreviatePath_HandlesNullAndWhitespace(string? path, int maxLength, string? expected)
   {
     var abbreviated = Utilities.AbbreviatePathForDisplay(path, maxLength);
-    abbreviated.Should().Be(expected);
+    Assert.Equal(expected, abbreviated);
   }
 
   // These test cases were already correct.
@@ -21,7 +19,7 @@ public class AbbreviatePathForDisplayTests
   public void AbbreviatePath_WhenPathIsShorterThanMaxLength_ReturnsTrimmedOriginal(string path, int maxLength, string expected)
   {
     var abbreviated = Utilities.AbbreviatePathForDisplay(path, maxLength);
-    abbreviated.Should().Be(expected);
+    Assert.Equal(expected, abbreviated);
   }
 
   [Theory]
@@ -32,8 +30,8 @@ public class AbbreviatePathForDisplayTests
   public void AbbreviatePath_WhenFilenameIsTooLong_AbbreviatesFilename(string path, int maxLength, string expected)
   {
     var abbreviated = Utilities.AbbreviatePathForDisplay(path, maxLength);
-    expected?.Length.Should().Be(maxLength);
-    abbreviated.Should().Be(expected);
+    Assert.Equal(maxLength, expected?.Length);
+    Assert.Equal(expected, abbreviated);
   }
 
   [Theory]
@@ -46,8 +44,8 @@ public class AbbreviatePathForDisplayTests
   public void AbbreviatePath_ForAbsolutePaths_CompactsMiddle(string path, int maxLength, string expected)
   {
     var abbreviated = Utilities.AbbreviatePathForDisplay(path, maxLength);
-    expected?.Length.Should().Be(maxLength);
-    abbreviated.Should().Be(expected);
+    Assert.Equal(maxLength, expected?.Length);
+    Assert.Equal(expected, abbreviated);
   }
 
   [Theory]
@@ -57,8 +55,8 @@ public class AbbreviatePathForDisplayTests
   public void AbbreviatePath_ForRelativePaths_CompactsMiddle(string path, int maxLength, string expected)
   {
     var abbreviated = Utilities.AbbreviatePathForDisplay(path, maxLength);
-    expected?.Length.Should().Be(maxLength);
-    abbreviated.Should().Be(expected);
+    Assert.Equal(maxLength, expected?.Length);
+    Assert.Equal(expected, abbreviated);
   }
 
   [Theory]
@@ -71,8 +69,8 @@ public class AbbreviatePathForDisplayTests
   public void AbbreviatePath_ForUncPaths_CompactsMiddleAndPreservesRoot(string path, int maxLength, string expected)
   {
     var abbreviated = Utilities.AbbreviatePathForDisplay(path, maxLength);
-    expected?.Length.Should().Be(maxLength);
-    abbreviated.Should().Be(expected);
+    Assert.Equal(maxLength, expected?.Length);
+    Assert.Equal(expected, abbreviated);
   }
 
   [Theory]
@@ -83,8 +81,8 @@ public class AbbreviatePathForDisplayTests
   public void AbbreviatePath_CompactsMiddle(string path, int maxLength, string expected)
   {
     var abbreviated = Utilities.AbbreviatePathForDisplay(path, maxLength);
-    expected?.Length.Should().Be(maxLength);
-    abbreviated.Should().Be(expected);
+    Assert.Equal(maxLength, expected?.Length);
+    Assert.Equal(expected, abbreviated);
   }
 
   // These test cases were already correct.
@@ -95,7 +93,7 @@ public class AbbreviatePathForDisplayTests
   public void AbbreviatePath_WithVerySmallMaxLength_TruncatesFromLeft(string path, int maxLength, string expected)
   {
     var abbreviated = Utilities.AbbreviatePathForDisplay(path, maxLength);
-    expected?.Length.Should().Be(maxLength);
-    abbreviated.Should().Be(expected);
+    Assert.Equal(maxLength, expected?.Length);
+    Assert.Equal(expected, abbreviated);
   }
 }

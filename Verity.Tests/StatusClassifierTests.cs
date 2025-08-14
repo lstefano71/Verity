@@ -1,12 +1,10 @@
-using FluentAssertions;
-
 public class StatusClassifierTests
 {
   [Fact]
   public void Classify_WhenHashesMatch_ReturnsSuccess()
   {
     var result = StatusClassifier.Classify("abc", "abc", DateTime.UtcNow, DateTime.UtcNow);
-    result.Should().Be(ResultStatus.Success);
+    Assert.Equal(ResultStatus.Success, result);
   }
 
   [Fact]
@@ -15,7 +13,7 @@ public class StatusClassifierTests
     var manifestTime = DateTime.UtcNow;
     var fileTime = manifestTime.AddMinutes(-10);
     var result = StatusClassifier.Classify("abc", "def", fileTime, manifestTime);
-    result.Should().Be(ResultStatus.Error);
+    Assert.Equal(ResultStatus.Error, result);
   }
 
   [Fact]
@@ -23,7 +21,7 @@ public class StatusClassifierTests
   {
     var now = DateTime.UtcNow;
     var result = StatusClassifier.Classify("abc", "def", now, now);
-    result.Should().Be(ResultStatus.Error);
+    Assert.Equal(ResultStatus.Error, result);
   }
 
   [Fact]
@@ -32,7 +30,7 @@ public class StatusClassifierTests
     var manifestTime = DateTime.UtcNow;
     var fileTime = manifestTime.AddMinutes(10);
     var result = StatusClassifier.Classify("abc", "def", fileTime, manifestTime);
-    result.Should().Be(ResultStatus.Warning);
+    Assert.Equal(ResultStatus.Warning, result);
   }
 
   [Theory]
@@ -45,16 +43,16 @@ public class StatusClassifierTests
     var manifestTime = DateTime.UtcNow;
     var fileTime = manifestTime.AddMinutes(-10);
     var result = StatusClassifier.Classify(expected, actual, fileTime, manifestTime);
-    result.Should().Be(expectedStatus);
+    Assert.Equal(expectedStatus, result);
   }
 
   [Fact]
   public void Classify_ExtremeDates()
   {
     var result = StatusClassifier.Classify("abc", "def", DateTime.MaxValue, DateTime.MinValue);
-    result.Should().Be(ResultStatus.Warning);
+    Assert.Equal(ResultStatus.Warning, result);
 
     result = StatusClassifier.Classify("abc", "def", DateTime.MinValue, DateTime.MaxValue);
-    result.Should().Be(ResultStatus.Error);
+    Assert.Equal(ResultStatus.Error, result);
   }
 }

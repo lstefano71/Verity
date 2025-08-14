@@ -1,5 +1,3 @@
-using FluentAssertions;
-
 public class GlobUtilsTests : IDisposable
 {
   private readonly string tempDir;
@@ -39,7 +37,7 @@ public class GlobUtilsTests : IDisposable
   public void NormalizeGlobs_ReturnsExpected(string? input, bool isExclude, string[] expected)
   {
     var result = GlobUtils.NormalizeGlobs(input, isExclude);
-    result.Should().Equal(expected);
+    Assert.Equal(expected, result);
   }
 
   [Fact]
@@ -47,7 +45,7 @@ public class GlobUtilsTests : IDisposable
   {
     var input = new string('a', 10000) + ";*.txt";
     var result = GlobUtils.NormalizeGlobs(input);
-    result.Should().Contain("*.txt");
+    Assert.Contains("*.txt", result);
   }
 
   [Theory]
@@ -61,28 +59,28 @@ public class GlobUtilsTests : IDisposable
   public void IsMatch_BasicCases(string relativePath, string[] include, string[]? exclude, bool expected)
   {
     var result = GlobUtils.IsMatch(relativePath, include, exclude);
-    result.Should().Be(expected);
+    Assert.Equal(expected, result);
   }
 
   [Fact]
   public void IsMatch_CaseInsensitive()
   {
     var result = GlobUtils.IsMatch("FILE.TXT", ["*.txt"], null);
-    result.Should().BeTrue();
+    Assert.True(result);
   }
 
   [Fact]
   public void IsMatch_NullOrEmptyPatterns_DefaultsToIncludeAll()
   {
-    GlobUtils.IsMatch("any.file", null, null).Should().BeTrue();
-    GlobUtils.IsMatch("any.file", [], null).Should().BeTrue();
+    Assert.True(GlobUtils.IsMatch("any.file", null, null));
+    Assert.True(GlobUtils.IsMatch("any.file", [], null));
   }
 
   [Fact]
   public void IsMatch_InvalidGlobPattern_DoesNotThrow()
   {
     var result = GlobUtils.IsMatch("file.txt", ["[invalid"], null);
-    result.Should().BeFalse();
+    Assert.False(result);
   }
 
   [Fact]
@@ -90,7 +88,7 @@ public class GlobUtilsTests : IDisposable
   {
     var files = CreateFiles("a.txt", "b.md", "c.log", Path.Combine("subdir", "d.txt"));
     var result = GlobUtils.FilterFiles(files, tempDir, ["*.txt", "subdir/*.txt"], null);
-    result.Should().BeEquivalentTo(["a.txt", Path.Combine("subdir", "d.txt")]);
+    Assert.Equal(new[] { "a.txt", Path.Combine("subdir", "d.txt") }.OrderBy(x => x), result.OrderBy(x => x));
   }
 
   [Fact]
@@ -98,7 +96,7 @@ public class GlobUtilsTests : IDisposable
   {
     var files = CreateFiles("a.txt", "b.md", "c.log");
     var result = GlobUtils.FilterFiles(files, tempDir, null, ["*.md", "*.log"]);
-    result.Should().BeEquivalentTo(["a.txt"]);
+    Assert.Equal(new[] { "a.txt" }.OrderBy(x => x), result.OrderBy(x => x));
   }
 
   [Fact]
@@ -106,7 +104,7 @@ public class GlobUtilsTests : IDisposable
   {
     var files = CreateFiles("a.txt", "b.md", "c.log", "d.txt");
     var result = GlobUtils.FilterFiles(files, tempDir, ["*.txt", "*.md"], ["a.txt"]);
-    result.Should().BeEquivalentTo(["b.md", "d.txt"]);
+    Assert.Equal(new[] { "b.md", "d.txt" }.OrderBy(x => x), result.OrderBy(x => x));
   }
 
   [Fact]
@@ -114,7 +112,7 @@ public class GlobUtilsTests : IDisposable
   {
     var files = CreateFiles("a.txt", "b.md");
     var result = GlobUtils.FilterFiles(files, tempDir, null, null);
-    result.Should().BeEquivalentTo(["a.txt", "b.md"]);
+    Assert.Equal(new[] { "a.txt", "b.md" }.OrderBy(x => x), result.OrderBy(x => x));
   }
 
   [Fact]
@@ -122,7 +120,7 @@ public class GlobUtilsTests : IDisposable
   {
     var files = Array.Empty<string>();
     var result = GlobUtils.FilterFiles(files, tempDir, ["*.txt"], null);
-    result.Should().BeEmpty();
+    Assert.Empty(result);
   }
 
   [Fact]
@@ -130,6 +128,6 @@ public class GlobUtilsTests : IDisposable
   {
     var files = CreateFiles("a.txt", "b.md");
     var result = GlobUtils.FilterFiles(files, tempDir, null, ["**/*"]);
-    result.Should().BeEmpty();
+    Assert.Empty(result);
   }
 }

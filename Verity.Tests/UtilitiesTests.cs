@@ -1,5 +1,3 @@
-using FluentAssertions;
-
 public class UtilitiesTests
 {
   [Fact]
@@ -13,27 +11,27 @@ public class UtilitiesTests
     var includeGlobs = new[] { "*.txt", "*.md" };
     var excludeGlobs = new[] { "*.log" };
     var panel = Utilities.BuildHeaderPanel(title, startTime, manifestName, algorithm, root, includeGlobs, excludeGlobs);
-    panel.Should().NotBeNull();
-    panel.Header.Should().NotBeNull();
-    panel.Header.Text.Should().Contain(title);
-    panel.Header.Text.Should().Contain("[bold"); // Header uses bold markup
+    Assert.NotNull(panel);
+    Assert.NotNull(panel.Header);
+    Assert.Contains(title, panel.Header.Text);
+    Assert.Contains("[bold", panel.Header.Text); // Header uses bold markup
 
     // Use Spectre.Console.Testing's TestConsole to render and assert output
     var console = new Spectre.Console.Testing.TestConsole();
     console.Write(panel);
     var output = console.Output;
-    output.Should().Contain(manifestName);
-    output.Should().Contain(algorithm);
-    output.Should().Contain(root);
+    Assert.Contains(manifestName, output);
+    Assert.Contains(algorithm, output);
+    Assert.Contains(root, output);
 
     // Assert the output contains the expected structure (plain text, not markup)
-    output.Should().Contain("Version:", "Version label not found");
-    output.Should().Contain("Started:", "Started label not found");
-    output.Should().Contain("Manifest:", "Manifest label not found");
-    output.Should().Contain("Algorithm:", "Algorithm label not found");
-    output.Should().Contain("Root:", "Root label not found");
-    output.Should().Contain("Include:", "Include label not found");
-    output.Should().Contain("Exclude:", "Exclude label not found");
+    Assert.Contains("Version:", output);
+    Assert.Contains("Started:", output);
+    Assert.Contains("Manifest:", output);
+    Assert.Contains("Algorithm:", output);
+    Assert.Contains("Root:", output);
+    Assert.Contains("Include:", output);
+    Assert.Contains("Exclude:", output);
 
     // Assert the values are present and in the correct order
     var expectedOrder = new[] {
@@ -48,15 +46,15 @@ public class UtilitiesTests
     var lastIndex = -1;
     foreach (var label in expectedOrder) {
       var idx = output.IndexOf(label);
-      idx.Should().BeGreaterThan(lastIndex, $"Label '{label}' is out of order");
+      Assert.True(idx > lastIndex);
       lastIndex = idx;
     }
 
     // Assert specific values
-    output.Should().Contain(manifestName);
-    output.Should().Contain(algorithm);
-    output.Should().Contain(root);
-    output.Should().Contain("*.txt");
-    output.Should().Contain("*.log");
+    Assert.Contains(manifestName, output);
+    Assert.Contains(algorithm, output);
+    Assert.Contains(root, output);
+    Assert.Contains("*.txt", output);
+    Assert.Contains("*.log", output);
   }
 }
