@@ -5,9 +5,7 @@
 # A Tera template to be rendered as the changelog's header.
 header = """
 # Changelog\n
-All notable changes to this project will be documented in this file.\n
 """
-# A Tera template to be rendered for each release in the changelog.
 # A Tera template to be rendered for each release in the changelog.
 # See https://keats.github.io/tera/docs/#introduction
 body = """
@@ -78,6 +76,9 @@ commit_parsers = [
     { body = ".*security", group = "Security" },
     { message = "^.*", group = "Changes" },
 ]
+
+tag_pattern = "v[0-9]*"
+
 # Exclude commits that are not matched by any commit parser.
 filter_commits = false
 # Order releases topologically instead of chronologically.
