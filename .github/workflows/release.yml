@@ -73,6 +73,7 @@ jobs:
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
+          args: -vv --latest
           
       - name: Prepare Release Body
         id: prep_body
