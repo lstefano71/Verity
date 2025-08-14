@@ -1,41 +1,98 @@
 ﻿using Spectre.Console;
 
+using System.Text;
+
 public static class Utilities
 {
+  /// <summary>
+  /// Abbreviates a file system path for display by replacing middle components with an ellipsis.
+  /// This method aims to replicate the behavior seen in Visual Studio's "Recent Files" menu.
+  /// </summary>
+  /// <param name="path">The path to abbreviate. The function handles null/whitespace and trims the input.</param>
+  /// <param name="maxLength">The maximum character length of the resulting string. Defaults to 40.</param>
+  /// <returns>
+  /// The abbreviated path, or the original path if it's within the maxLength.
+  /// Returns null if the input path is null, empty, or whitespace.
+  /// The returned string will never exceed maxLength.
+  /// </returns>
   public static string? AbbreviatePathForDisplay(string? path, int maxLength = 40)
   {
-    path = path?.Trim();
-    if (string.IsNullOrWhiteSpace(path)) return path;
-
-    if (path.Length <= maxLength) return path;
-    if (maxLength < 4) return path[0] + ".." + path[1];
-
-    // Detect drive letter and colon (Windows style)
-    string drive = "";
-    string rest = path;
-    if (path.Length > 2 && path[1] == ':' && (path[2] == '\\' || path[2] == '/')) {
-      drive = path[..3]; // e.g. "C:\"
-      rest = path[3..];
+    if (string.IsNullOrWhiteSpace(path)) {
+      return null;
     }
 
-    var dir = Path.GetDirectoryName(rest) ?? "";
-    var file = Path.GetFileName(rest); // Use full filename for display
-    if (string.IsNullOrWhiteSpace(file)) return "";
+    path = path.Trim();
 
-    // Always produce C:\...\file.txt style for long paths
-    if (dir.Length > 0 && (drive + dir + Path.DirectorySeparatorChar + file).Length > maxLength) {
-      // Show drive, ellipsis, then filename
-      string abbreviated = $"{drive}...{Path.DirectorySeparatorChar}{file}";
-      if (abbreviated.Length > maxLength)
-        abbreviated = abbreviated[..maxLength];
-      return abbreviated;
+    if (path.Length <= maxLength) {
+      return path;
     }
 
-    string result = drive + (dir.Length > 0 ? dir + Path.DirectorySeparatorChar + file : file);
-    if (result.Length > maxLength)
-      result = result[..maxLength];
-    return result;
+    const string ellipsis = "...";
+
+    // Handle cases where maxLength is extremely small
+    if (maxLength <= ellipsis.Length) {
+      // Truncate from the left to preserve the end of the path
+      return path.Substring(path.Length - maxLength);
+    }
+
+    string root = Path.GetPathRoot(path) ?? string.Empty;
+    string filename = Path.GetFileName(path);
+
+    // Handle a path that is just a filename (no directory part)
+    if (root.Length == 0 && filename.Equals(path, StringComparison.Ordinal)) {
+      // The filename is guaranteed to be > maxLength here.
+      // Using string.Concat to cleanly handle the ReadOnlySpan<char> and avoid CS0019.
+      return string.Concat(ellipsis, filename.AsSpan(filename.Length - (maxLength - ellipsis.Length)));
+    }
+
+    // If the root and filename with an ellipsis are already too long, we must abbreviate the filename.
+    // This is a fallback for very long filenames on otherwise short paths.
+    if (root.Length + ellipsis.Length + 1 + filename.Length > maxLength) {
+      return string.Concat(ellipsis, filename.AsSpan(filename.Length - (maxLength - ellipsis.Length)));
+    }
+
+    string? dirPart = Path.GetDirectoryName(path);
+    // If there's no directory part, we've already handled it or it should fit.
+    // This check is for safety.
+    if (string.IsNullOrEmpty(dirPart) || dirPart.Length <= root.Length) {
+      return path;
+    }
+
+    // The core logic starts here. We work with the "middle" part of the path.
+    string middle = dirPart.Substring(root.Length);
+
+    char[] separators = { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
+    var middleComponents = middle.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+
+    var rightBuilder = new StringBuilder(filename);
+
+    // Add directory components from the end of the middle part to the "right" side,
+    // as long as they fit within the maxLength.
+    for (int i = middleComponents.Length - 1; i >= 0; i--) {
+      // Check if adding the next component and a separator would exceed the limit
+      if (root.Length + ellipsis.Length + 1 + middleComponents[i].Length + 1 + rightBuilder.Length > maxLength) {
+        break;
+      }
+
+      // Prepend the separator and the component
+      rightBuilder.Insert(0, separators[0]);
+      rightBuilder.Insert(0, middleComponents[i]);
+    }
+
+    var finalPath = new StringBuilder(root);
+    // For relative paths, the root is empty, so the path will correctly start with "..."
+    if (root.Length > 0) {
+      finalPath.Append(ellipsis);
+      finalPath.Append(separators[0]);
+    } else {
+      finalPath.Append(ellipsis);
+      finalPath.Append(separators[0]);
+    }
+    finalPath.Append(rightBuilder);
+
+    return finalPath.ToString();
   }
+
 
   // Pads the abbreviated path with '▪' to the left if needed, then escapes for Spectre.Console
   public static string AbbreviateAndPadPathForDisplay(string path, int padLen = 50)
