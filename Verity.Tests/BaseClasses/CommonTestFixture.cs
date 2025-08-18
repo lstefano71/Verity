@@ -1,4 +1,12 @@
+using System;
 using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using Spectre.Console;
+using Spectre.Console.Testing;
 
 public class ProcessResult
 {
@@ -56,45 +64,138 @@ public class CommonTestFixture : IAsyncLifetime, IDisposable
 
   public async Task<ProcessResult> RunVerity(string args)
   {
-    // Use the main Verity.exe from Verity\bin\Debug\net9.0
-    // Use the correct absolute path for Verity.exe
-    // Use the workspace root to construct the path to Verity.exe
-    // Dynamically search for Verity.exe in candidate locations
-    // Go up to workspace root, then down into Verity/bin/... for Verity.exe
-    var testBaseDir = AppContext.BaseDirectory;
-    // Go up four levels: net9.0 -> Debug -> bin -> Verity.Tests -> workspace root
-    var workspaceRoot = Path.GetFullPath(Path.Combine(testBaseDir, "..", "..", "..", ".."));
-    var verityProjectDir = Path.Combine(workspaceRoot, "Verity");
-    var candidatePaths = new[] {
-    Path.Combine(verityProjectDir, "bin", "Release", "net9.0", "publish", "Verity.exe"),
-    Path.Combine(verityProjectDir, "bin", "Release", "net9.0", "Verity.exe"),
-    Path.Combine(verityProjectDir, "bin", "Debug", "net9.0", "Verity.exe")
-  };
-    string? exePath = candidatePaths
-      .Where(File.Exists)
-      .OrderByDescending(File.GetLastWriteTimeUtc)
-      .FirstOrDefault() ?? throw new FileNotFoundException($"Verity.exe not found in any candidate location: {string.Join("; ", candidatePaths)}");
-    var psi = new ProcessStartInfo {
-      FileName = exePath,
-      Arguments = args,
-      WorkingDirectory = TempDir,
-      RedirectStandardOutput = true,
-      RedirectStandardError = true,
-      UseShellExecute = false,
-      CreateNoWindow = true
-    };
-    using var proc = Process.Start(psi)!;
-    var stdOut = await proc.StandardOutput.ReadToEndAsync();
-    var stdErr = await proc.StandardError.ReadToEndAsync();
-    proc.WaitForExit();
-    if (DebugOutputEnabled) {
-      Console.WriteLine("STDOUT:\n" + stdOut);
-      Console.WriteLine("STDERR:\n" + stdErr);
+    // Parse args as if from CLI, but run Program methods directly.
+    // All file paths are resolved as if from TempDir, but we do NOT change the process current directory.
+    var stdOut = new StringWriter();
+    var stdErr = new StringWriter();
+    var origOut = Console.Out;
+    var origErr = Console.Error;
+    var testConsole = new TestConsole();
+    int exitCode = -999;
+    try
+    {
+      Console.SetOut(stdOut);
+      Console.SetError(stdErr);
+      AnsiConsole.Console = testConsole;
+      // Split args respecting quotes
+      var argList = SimpleArgSplitter.Split(args);
+      if (argList.Length == 0)
+        throw new ArgumentException("No command specified");
+      var command = argList[0].ToLowerInvariant();
+      var commandArgs = argList.Skip(1).ToArray();
+      // Helper to get value for an option
+      string? GetOpt(string name)
+      {
+        for (int i = 0; i < commandArgs.Length; i++)
+        {
+          if (commandArgs[i] == name && i + 1 < commandArgs.Length)
+            return commandArgs[i + 1];
+          if (commandArgs[i].StartsWith(name + "=", StringComparison.Ordinal))
+            return commandArgs[i].Substring(name.Length + 1).Trim('"');
+        }
+        return null;
+      }
+      bool HasOpt(string name) => commandArgs.Contains(name);
+      // Helper to resolve a path as absolute if not already
+      string? Abs(string? path) => string.IsNullOrEmpty(path) ? path : Path.IsPathRooted(path) ? path : Path.Combine(TempDir, path);
+      // Map positional and named args, resolving all paths relative to TempDir
+      switch (command)
+      {
+        case "verify":
+        {
+          string checksumFile = commandArgs.Length > 0 ? Abs(commandArgs[0])! : throw new ArgumentException("Missing manifest file");
+          string? root = Abs(GetOpt("--root"));
+          string? algorithm = GetOpt("--algorithm");
+          int? threads = int.TryParse(GetOpt("--threads"), out var t) ? t : null;
+          string? tsvReport = Abs(GetOpt("--tsv-report"));
+          bool showTable = HasOpt("--show-table");
+          string? include = GetOpt("--include");
+          string? exclude = GetOpt("--exclude");
+          exitCode = await new Program().Verify(
+            checksumFile,
+            root,
+            algorithm,
+            threads,
+            tsvReport,
+            showTable,
+            include,
+            exclude,
+            CancellationToken.None
+          );
+          break;
+        }
+        case "create":
+        {
+          string outputManifest = commandArgs.Length > 0 ? Abs(commandArgs[0])! : throw new ArgumentException("Missing output manifest");
+          string? root = Abs(GetOpt("--root"));
+          string? algorithm = GetOpt("--algorithm");
+          int? threads = int.TryParse(GetOpt("--threads"), out var t) ? t : null;
+          string? include = GetOpt("--include");
+          string? exclude = GetOpt("--exclude");
+          bool showTable = HasOpt("--show-table");
+          string? tsvReport = Abs(GetOpt("--tsv-report"));
+          exitCode = await new Program().Create(
+            outputManifest,
+            root,
+            algorithm,
+            threads,
+            include,
+            exclude,
+            showTable,
+            tsvReport,
+            CancellationToken.None
+          );
+          break;
+        }
+        case "add":
+        {
+          string manifestPath = commandArgs.Length > 0 ? Abs(commandArgs[0])! : throw new ArgumentException("Missing manifest file");
+          string? root = Abs(GetOpt("--root"));
+          string? algorithm = GetOpt("--algorithm");
+          int? threads = int.TryParse(GetOpt("--threads"), out var t) ? t : null;
+          string? include = GetOpt("--include");
+          string? exclude = GetOpt("--exclude");
+          bool showTable = HasOpt("--show-table");
+          string? tsvReport = Abs(GetOpt("--tsv-report"));
+          exitCode = await new Program().Add(
+            manifestPath,
+            root,
+            algorithm,
+            threads,
+            include,
+            exclude,
+            showTable,
+            tsvReport,
+            CancellationToken.None
+          );
+          break;
+        }
+        default:
+          throw new ArgumentException($"Unknown command: {command}");
+      }
     }
-    return new ProcessResult {
-      ExitCode = proc.ExitCode,
-      StdOut = stdOut,
-      StdErr = stdErr
+    catch (Exception ex)
+    {
+      stdErr.WriteLine(ex.ToString());
+      exitCode = -999;
+    }
+    finally
+    {
+      Console.SetOut(origOut);
+      Console.SetError(origErr);
+      // No SystemConsole in Spectre.Console.Testing, so just set to a new TestConsole to avoid null
+      AnsiConsole.Console = new TestConsole();
+    }
+    if (DebugOutputEnabled)
+    {
+      Console.WriteLine("STDOUT:\n" + stdOut.ToString());
+      Console.WriteLine("STDERR:\n" + stdErr.ToString());
+    }
+    return new ProcessResult
+    {
+      ExitCode = exitCode,
+      StdOut = stdOut.ToString() + testConsole.Output,
+      StdErr = stdErr.ToString()
     };
   }
 
