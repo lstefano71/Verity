@@ -32,6 +32,11 @@ public class ManifestFileCompletedEventArgs(string filePath, string relativePath
 
 public class ManifestCreationService
 {
+  /// <summary>
+  /// Optional VSS path resolver for accessing files through VSS snapshots.
+  /// </summary>
+  public VssPathResolver? VssResolver { get; set; }
+
   public event EventHandler<ManifestFileStartedEventArgs>? FileStarted;
   public event EventHandler<ManifestFileProgressEventArgs>? FileProgress;
   public event EventHandler<ManifestFileCompletedEventArgs>? FileCompleted;
@@ -56,9 +61,13 @@ public class ManifestCreationService
                   cancellationToken.ThrowIfCancellationRequested();
                   var relPath = mode == ManifestOperationMode.Create ? Path.GetRelativePath(root.FullName, partition.Current) : partition.Current;
                   var file = Path.Combine(root.FullName, relPath);
+                  
+                  // Use VSS path if resolver is available
+                  var effectivePath = VssResolver?.ResolvePath(file) ?? file;
+                  
                   long fileSize = 0;
                   try {
-                    fileSize = new FileInfo(file).Length;
+                    fileSize = new FileInfo(effectivePath).Length;
                   } catch {
                     fileSize = 0;
                   }
@@ -71,7 +80,7 @@ public class ManifestCreationService
                   long bytesReadTotal = 0;
                   string hash = string.Empty;
                   try {
-                    using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous);
+                    using var stream = new FileStream(effectivePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous);
                     using var hasher = IncrementalHash.CreateHash(new HashAlgorithmName(algorithm));
                     byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
                     try {

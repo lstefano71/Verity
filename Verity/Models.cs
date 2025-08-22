@@ -5,7 +5,8 @@ public record struct CliOptions(
     FileInfo? TsvReportFile = null,
     bool ShowTable = false,
     string[]? IncludeGlobs = null,
-    string[]? ExcludeGlobs = null
+    string[]? ExcludeGlobs = null,
+    bool UseVss = false
 );
 
 public record ChecksumEntry(
