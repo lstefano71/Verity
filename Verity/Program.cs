@@ -6,12 +6,44 @@ using Spectre.Console;
 
 using System.Diagnostics;
 
+using Verity.Utilities;
+
 public class Program
 {
 
   // The application entry point is simplified to just run our class.
   public static async Task Main(string[] args)
   {
+    // Check if VSS mode is requested by looking for --vss flag in arguments
+    bool vssRequested = args.Any(arg => string.Equals(arg, "--vss", StringComparison.OrdinalIgnoreCase) ||
+                                        string.Equals(arg, "-vss", StringComparison.OrdinalIgnoreCase));
+
+    // If VSS mode is requested and we're not elevated, try to restart with elevation
+    if (vssRequested && !ElevationHelper.IsElevated())
+    {
+      AnsiConsole.MarkupLine("[yellow]VSS mode requires administrator privileges. Requesting elevation...[/]");
+      
+      try
+      {
+        bool restarted = await ElevationHelper.RestartElevatedAsync(args);
+        if (restarted)
+        {
+          AnsiConsole.MarkupLine("[green]Restarting with elevated privileges...[/]");
+          Environment.Exit(0); // Exit the original process
+        }
+        else
+        {
+          AnsiConsole.MarkupLine("[red]Elevation was declined. VSS mode cannot be used without administrator privileges.[/]");
+          Environment.Exit((int)VssErrorCode.ElevationRequired);
+        }
+      }
+      catch (Exception ex)
+      {
+        AnsiConsole.MarkupLine($"[red]Failed to restart with elevation: {ex.Message}[/]");
+        Environment.Exit((int)VssErrorCode.ElevationRequired);
+      }
+    }
+
     var app = ConsoleApp.Create();
     app.Add<Program>();
     await app.RunAsync(args);
@@ -28,6 +60,7 @@ public class Program
   /// <param name="showTable">Force the diagnostic table to be shown even if there are no issues.</param>
   /// <param name="include">Semicolon-separated glob patterns for files to include.</param>
   /// <param name="exclude">Semicolon-separated glob patterns for files to exclude.</param>
+  /// <param name="vss">Create VSS snapshot for accessing locked files (requires elevation).</param>
   [Command("verify")]
   public async Task<int> Verify(
       [Argument] string checksumFile,
@@ -38,6 +71,7 @@ public class Program
       bool showTable = false,
       string? include = null,
       string? exclude = null,
+      bool vss = false,
       CancellationToken cancellationToken = default
   )
   {
@@ -48,7 +82,8 @@ public class Program
         !string.IsNullOrWhiteSpace(tsvReport) ? new FileInfo(tsvReport) : null,
         showTable,
         GlobUtils.NormalizeGlobs(include, false),
-        GlobUtils.NormalizeGlobs(exclude, true));
+        GlobUtils.NormalizeGlobs(exclude, true),
+        vss);
       return await RunVerification(options, threads ?? Environment.ProcessorCount, cancellationToken);
     } catch (OperationCanceledException) { AnsiConsole.MarkupLine("[red]Interrupted by user[/]"); return -2; }
   }
@@ -64,6 +99,7 @@ public class Program
   /// <param name="exclude">Semicolon-separated glob patterns for files to exclude from the manifest.</param>
   /// <param name="showTable">Force the diagnostic table to be shown even if there are no issues.</param>
   /// <param name="tsvReport">Path to write a machine-readable TSV report.</param>
+  /// <param name="vss">Create VSS snapshot for accessing locked files (requires elevation).</param>
   [Command("create")]
   public async Task<int> Create(
       [Argument] string outputManifest,
@@ -74,6 +110,7 @@ public class Program
       string? exclude = null,
       bool showTable = false,
       string? tsvReport = null,
+      bool vss = false,
       CancellationToken cancellationToken = default)
   {
     try {
@@ -83,7 +120,8 @@ public class Program
         !string.IsNullOrWhiteSpace(tsvReport) ? new FileInfo(tsvReport) : null,
         showTable,
         GlobUtils.NormalizeGlobs(include, false),
-        GlobUtils.NormalizeGlobs(exclude, true));
+        GlobUtils.NormalizeGlobs(exclude, true),
+        vss);
 
       return await RunCreateManifest(options, threads ?? Environment.ProcessorCount, cancellationToken);
     } catch (OperationCanceledException) {
@@ -103,6 +141,7 @@ public class Program
   /// <param name="exclude">Semicolon-separated glob patterns for files to exclude from being added.</param>
   /// <param name="showTable">Force the diagnostic table to be shown even if there are no issues.</param>
   /// <param name="tsvReport">Path to write a machine-readable TSV report.</param>
+  /// <param name="vss">Create VSS snapshot for accessing locked files (requires elevation).</param>
   [Command("add")]
   public async Task<int> Add(
       [Argument] string manifestPath,
@@ -113,6 +152,7 @@ public class Program
       string? exclude = null,
       bool showTable = false,
       string? tsvReport = null,
+      bool vss = false,
       CancellationToken cancellationToken = default)
   {
     try {
@@ -122,7 +162,8 @@ public class Program
         !string.IsNullOrWhiteSpace(tsvReport) ? new FileInfo(tsvReport) : null,
         showTable,
         GlobUtils.NormalizeGlobs(include, false),
-        GlobUtils.NormalizeGlobs(exclude, true));
+        GlobUtils.NormalizeGlobs(exclude, true),
+        vss);
 
       return await RunAddToManifest(options, threads ?? Environment.ProcessorCount, cancellationToken);
     } catch (OperationCanceledException) {
@@ -134,6 +175,49 @@ public class Program
   public static async Task<int> RunVerification(CliOptions options, int threads, CancellationToken cancellationToken)
   {
     var startTime = DateTime.Now;
+    VssSnapshotManager? vssManager = null;
+    VssPathResolver? vssResolver = null;
+
+    try
+    {
+      // Create VSS snapshot if requested
+      if (options.UseVss)
+      {
+        var rootPath = options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName!;
+        var volumeRoot = Path.GetPathRoot(rootPath);
+        
+        if (string.IsNullOrEmpty(volumeRoot))
+        {
+          AnsiConsole.MarkupLine("[red]Error: Unable to determine volume root for VSS snapshot.[/]");
+          return (int)VssErrorCode.VolumeNotSupported;
+        }
+
+        AnsiConsole.MarkupLine($"[yellow]Creating VSS snapshot for volume {volumeRoot}...[/]");
+        
+        try
+        {
+          vssManager = new VssSnapshotManager(volumeRoot);
+          await AnsiConsole.Status()
+              .Spinner(Spinner.Known.Dots)
+              .SpinnerStyle(Style.Parse("yellow"))
+              .StartAsync("Creating volume snapshot...", async ctx => {
+                await vssManager.CreateSnapshotAsync(cancellationToken);
+              });
+          
+          vssResolver = vssManager.CreatePathResolver();
+          AnsiConsole.MarkupLine($"[green]VSS snapshot created successfully.[/]");
+        }
+        catch (VssSnapshotException ex)
+        {
+          AnsiConsole.MarkupLine($"[red]VSS Error: {ex.Message}[/]");
+          return (int)VssErrorCode.SnapshotCreationFailed;
+        }
+        catch (Exception ex)
+        {
+          AnsiConsole.MarkupLine($"[red]Unexpected error creating VSS snapshot: {ex.Message}[/]");
+          return (int)VssErrorCode.SnapshotCreationFailed;
+        }
+      }
     var headerPanel = Utilities.BuildHeaderPanel(
         "Verification Info",
         startTime,
@@ -141,7 +225,8 @@ public class Program
         options.Algorithm,
         options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName!,
         options.IncludeGlobs,
-        options.ExcludeGlobs
+        options.ExcludeGlobs,
+        options.UseVss ? "VSS Snapshot Mode" : null
     );
     AnsiConsole.Write(headerPanel);
 
@@ -189,6 +274,12 @@ public class Program
         .StartAsync(async ctx => {
           var mainTask = ctx.AddTask($"[green]Verifying files ({totalBytes.Bytes().Humanize()})[/]", maxValue: totalFiles);
           var verificationService = new VerificationService();
+          
+          // Set VSS resolver if available
+          if (vssResolver != null)
+          {
+            verificationService.VssResolver = vssResolver;
+          }
 
           verificationService.FileStarted += (sender, e) => {
             int padLen = 50;
@@ -226,6 +317,16 @@ public class Program
     if (summary.ErrorCount > 0) return -1;
     if (summary.WarningCount > 0) return 1;
     return 0;
+    }
+    finally
+    {
+      // Cleanup VSS snapshot
+      if (vssManager != null)
+      {
+        AnsiConsole.MarkupLine("[yellow]Cleaning up VSS snapshot...[/]");
+        vssManager.Dispose();
+      }
+    }
   }
 
   public static async Task<int> RunManifestOperation(
@@ -237,6 +338,48 @@ public class Program
     var startTime = DateTime.Now;
     var stopwatch = Stopwatch.StartNew();
     var rootPath = options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName!;
+    VssSnapshotManager? vssManager = null;
+    VssPathResolver? vssResolver = null;
+
+    try
+    {
+      // Create VSS snapshot if requested
+      if (options.UseVss)
+      {
+        var volumeRoot = Path.GetPathRoot(rootPath);
+        
+        if (string.IsNullOrEmpty(volumeRoot))
+        {
+          AnsiConsole.MarkupLine("[red]Error: Unable to determine volume root for VSS snapshot.[/]");
+          return (int)VssErrorCode.VolumeNotSupported;
+        }
+
+        AnsiConsole.MarkupLine($"[yellow]Creating VSS snapshot for volume {volumeRoot}...[/]");
+        
+        try
+        {
+          vssManager = new VssSnapshotManager(volumeRoot);
+          await AnsiConsole.Status()
+              .Spinner(Spinner.Known.Dots)
+              .SpinnerStyle(Style.Parse("yellow"))
+              .StartAsync("Creating volume snapshot...", async ctx => {
+                await vssManager.CreateSnapshotAsync(cancellationToken);
+              });
+          
+          vssResolver = vssManager.CreatePathResolver();
+          AnsiConsole.MarkupLine($"[green]VSS snapshot created successfully.[/]");
+        }
+        catch (VssSnapshotException ex)
+        {
+          AnsiConsole.MarkupLine($"[red]VSS Error: {ex.Message}[/]");
+          return (int)VssErrorCode.SnapshotCreationFailed;
+        }
+        catch (Exception ex)
+        {
+          AnsiConsole.MarkupLine($"[red]Unexpected error creating VSS snapshot: {ex.Message}[/]");
+          return (int)VssErrorCode.SnapshotCreationFailed;
+        }
+      }
 
     var headerPanel = Utilities.BuildHeaderPanel(
         mode == ManifestOperationMode.Create ? "Manifest Creation Info" : "Manifest Add Info",
@@ -245,7 +388,8 @@ public class Program
         options.Algorithm,
         rootPath,
         options.IncludeGlobs,
-        options.ExcludeGlobs
+        options.ExcludeGlobs,
+        options.UseVss ? "VSS Snapshot Mode" : null
     );
     AnsiConsole.Write(headerPanel);
 
@@ -291,6 +435,12 @@ public class Program
         .StartAsync(async ctx => {
           var mainTask = ctx.AddTask($"[green]{(mode == ManifestOperationMode.Create ? "Creating manifest" : "Adding to manifest")} ({totalBytes.Bytes().Humanize()})[/]", maxValue: totalBytes);
           var manifestService = new ManifestCreationService();
+          
+          // Set VSS resolver if available
+          if (vssResolver != null)
+          {
+            manifestService.VssResolver = vssResolver;
+          }
           manifestService.FileStarted += (sender, e) => {
             int padLen = 50;
             var safeRelPath = Utilities.AbbreviateAndPadPathForDisplay(e.RelativePath, padLen);
@@ -333,6 +483,16 @@ public class Program
     if (summary.ErrorCount > 0) return -1;
     if (summary.WarningCount > 0) return 1;
     return 0;
+    }
+    finally
+    {
+      // Cleanup VSS snapshot
+      if (vssManager != null)
+      {
+        AnsiConsole.MarkupLine("[yellow]Cleaning up VSS snapshot...[/]");
+        vssManager.Dispose();
+      }
+    }
   }
 
   private static async Task<(IReadOnlyCollection<string> newFiles, long totalBytes)> NewFilesAsync(

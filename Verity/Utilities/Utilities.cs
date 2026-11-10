@@ -37,7 +37,7 @@ public static class Utilities
   }
 
   // Helper to build a Spectre.Console Panel for header info
-  public static Panel BuildHeaderPanel(string title, DateTime startTime, string manifestName, string algorithm, string root, string[]? includeGlobs = null, string[]? excludeGlobs = null)
+  public static Panel BuildHeaderPanel(string title, DateTime startTime, string manifestName, string algorithm, string root, string[]? includeGlobs = null, string[]? excludeGlobs = null, string? vssMode = null)
   {
     var entryAssembly = System.Reflection.Assembly.GetEntryAssembly();
     var versionAttr = entryAssembly?.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
@@ -48,6 +48,8 @@ public static class Utilities
       $"[bold]Version:[/] {version}\n[bold]Started:[/] {startTime.ToUniversalTime():yyyy-MM-dd HH:mm:ssZ}\n" +
       $"[bold]Manifest:[/] {manifestName}\n" +
       $"[bold]Algorithm:[/] {algorithm}\n[bold]Root:[/] {root}\n";
+    if (!string.IsNullOrEmpty(vssMode))
+      content += $"[bold]Mode:[/] {vssMode}\n";
     if (includeGlobs is { Length: > 0 } && (includeGlobs.Length != 1 || includeGlobs[0] != "*"))
       content += $"[bold]Include:[/] {string.Join(", ", includeGlobs)}\n";
     if (excludeGlobs is { Length: > 0 })

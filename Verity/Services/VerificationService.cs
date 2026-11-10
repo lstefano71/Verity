@@ -32,6 +32,11 @@ public class FileCompletedEventArgs(VerificationResult result, object? bag) : Ev
 
 public class VerificationService
 {
+  /// <summary>
+  /// Optional VSS path resolver for accessing files through VSS snapshots.
+  /// </summary>
+  public VssPathResolver? VssResolver { get; set; }
+
   public event EventHandler<FileStartedEventArgs>? FileStarted;
   public event EventHandler<FileProgressEventArgs>? FileProgress;
   public event EventHandler<FileCompletedEventArgs>? FileCompleted;
@@ -65,7 +70,9 @@ public class VerificationService
 
         long fileSize = -1;
         try {
-          fileSize = new FileInfo(fullPath).Length;
+          // Use VSS path if resolver is available
+          var effectivePath = VssResolver?.ResolvePath(fullPath) ?? fullPath;
+          fileSize = new FileInfo(effectivePath).Length;
         } catch (Exception) {
           // Will be handled by the consumer as a file not found error.
         }
@@ -82,6 +89,10 @@ public class VerificationService
           await foreach (var job in jobChannel.Reader.ReadAllAsync(cancellationToken)) {
             cancellationToken.ThrowIfCancellationRequested();
             var fullPath = Path.Combine(rootPath, job.Entry.RelativePath);
+                    
+            // Use VSS path if resolver is available and path is on the snapshot volume
+            var effectivePath = VssResolver?.ResolvePath(fullPath) ?? fullPath;
+                    
             VerificationResult result;
             var evt = new FileStartedEventArgs(job.Entry, fullPath, job.FileSize, null);
             FileStarted?.Invoke(this, evt);
@@ -94,7 +105,7 @@ public class VerificationService
                 int bufferSize = FileIOUtils.GetOptimalBufferSize(job.FileSize);
                 string actualHash;
                 long bytesReadTotal = 0;
-                using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous)) {
+                using (var stream = new FileStream(effectivePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous)) {
                   byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
                   try {
                     int bytesRead;
@@ -112,7 +123,7 @@ public class VerificationService
                 Interlocked.Add(ref totalBytesRead, job.FileSize);
                 if (string.Equals(actualHash, job.Entry.ExpectedHash, StringComparison.OrdinalIgnoreCase)) {
                   result = new(job.Entry, ResultStatus.Success, FullPath: fullPath);
-                } else if (new FileInfo(fullPath).LastWriteTimeUtc > checksumFileTimestamp) {
+                } else if (new FileInfo(effectivePath).LastWriteTimeUtc > checksumFileTimestamp) {
                   result = new(job.Entry, ResultStatus.Warning, actualHash, "Checksum mismatch (file is newer).", fullPath);
                 } else {
                   result = new(job.Entry, ResultStatus.Error, actualHash, "Checksum mismatch.", fullPath);
