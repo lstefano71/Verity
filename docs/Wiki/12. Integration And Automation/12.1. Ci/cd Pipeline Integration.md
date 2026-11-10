@@ -26,14 +26,16 @@ Verity uses a comprehensive exit code system to communicate verification outcome
 * **1**: Warning (warnings present, no errors)
 * **-1**: Error (one or more errors detected)
 * **-2**: Canceled by user
+* **100–103**: VSS failures (`VssErrorCode`: 100 elevation required/declined, 101 VSS not available, 102 snapshot creation failed or timed out, 103 volume not supported)
 
-These exit codes are determined by the `FinalSummary` object which aggregates verification results. The exit code logic is implemented in the `RunVerification` method in `Program.cs`:
+These exit codes are determined by the `FinalSummary` object which aggregates verification results. The exit code logic is implemented by `ExitCodes.FromSummary` in `RunPipeline.cs`, which the Report phase of every command (verify, create, add) uses:
 
 
 ```csharp
-if (summary.ErrorCount > 0) return -1;
-if (summary.WarningCount > 0) return 1;
-return 0;
+public static int FromSummary(FinalSummary summary) =>
+  summary.ErrorCount > 0 ? Errors      // -1
+  : summary.WarningCount > 0 ? Warnings // 1
+  : Success;                            // 0
 ```
 
 
@@ -83,7 +85,7 @@ The `build.cake` file provides a real-world example of integrating Verity into a
 
 ```csharp
 Task("Package")
-    .IsDependentOn("AOT-Compile")
+    .IsDependentOn("Publish")
     .IsDependentOn("Run-Tests")
     .Does(() => {
     // Get version information from Nerdbank.GitVersioning
@@ -121,8 +123,9 @@ The `Run-Tests` task demonstrates how Verity can be used to validate its own fun
 ```csharp
 Task("Run-Tests")
 .Does(() => {
-   var verityExe = System.IO.Path.Combine(Directory("./Verity/bin")
-   + Directory(configuration) + Directory("net9.0"), "Verity.exe");
+   // Absolute path: Cake 6 no longer resolves relative executable paths against the working directory.
+   var verityExe = MakeAbsolute(Directory("./Verity/bin")
+   + Directory(configuration) + Directory("net10.0")).CombineWithFilePath("Verity.exe").FullPath;
    
    var algorithms = new[] {
       new { Name = "SHA256", Ext = ".sha256" },
@@ -174,12 +177,12 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     
-    - name: Setup .NET 9
-      uses: actions/setup-dotnet@v4
+    - name: Setup .NET 10
+      uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: '9.0.x'
+        dotnet-version: '10.0.x'
     
     - name: Restore tools
       run: dotnet tool restore
@@ -203,7 +206,7 @@ jobs:
     
     - name: Upload verification report
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: verification-report
         path: verification-report.tsv
@@ -465,7 +468,7 @@ jobs:
   validate-binaries:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     
     - name: Scan for binaries
       id: scan-binaries

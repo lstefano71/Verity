@@ -62,6 +62,18 @@ public class VssPathResolver
     }
 
     /// <summary>
+    /// Resolves a directory path for enumeration. The result always ends with a separator:
+    /// a snapshot device root (\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopyN) cannot be
+    /// enumerated without one.
+    /// </summary>
+    /// <param name="originalDirectory">The original directory path to resolve.</param>
+    public string ResolveDirectoryPath(string originalDirectory)
+    {
+        var resolved = ResolvePath(originalDirectory);
+        return Path.EndsInDirectorySeparator(resolved) ? resolved : resolved + Path.DirectorySeparatorChar;
+    }
+
+    /// <summary>
     /// Creates a DirectoryInfo object that points to the snapshot version of the directory.
     /// </summary>
     /// <param name="original">The original DirectoryInfo.</param>

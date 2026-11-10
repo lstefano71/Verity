@@ -75,6 +75,19 @@ public class VssPathResolverTests
         Assert.Throws<ArgumentNullException>(() => NewResolver().ResolvePath(null!));
 
     [Fact]
+    public void ResolveDirectoryPath_VolumeRoot_KeepsTrailingSeparator()
+    {
+        // A snapshot device root cannot be enumerated without the trailing backslash.
+        Assert.Equal(TestSnapshotPath + @"\", NewResolver().ResolveDirectoryPath(@"C:\"));
+    }
+
+    [Fact]
+    public void ResolveDirectoryPath_Subdirectory_AddsTrailingSeparator()
+    {
+        Assert.Equal(TestSnapshotPath + @"\data\", NewResolver().ResolveDirectoryPath(@"C:\data"));
+    }
+
+    [Fact]
     public void ResolveDirectoryInfo_ValidDirectory_ReturnsSnapshotDirectoryInfo()
     {
         var result = NewResolver().ResolveDirectoryInfo(new DirectoryInfo(@"C:\Windows\System32"));

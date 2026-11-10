@@ -47,7 +47,8 @@
 
 ## Phase 5: Build & Release
 
-- [x] Verify successful Native AOT compilation via `dotnet publish`.
+- [x] ~~Verify successful Native AOT compilation via `dotnet publish`.~~ Superseded: Native AOT was dropped when VSS support arrived (AlphaVSS loads a C++/CLI assembly at runtime). Release builds are a self-contained single-file exe (`dotnet cake --target=Publish`).
+- [ ] Optional: restore Native AOT by replacing AlphaVSS with source-generated COM interop to `vssapi.dll` (needs verification in an elevated session).
 - [x] Write the `README.md` file including:
   - [x] Project purpose.
   - [x] CLI usage and examples.

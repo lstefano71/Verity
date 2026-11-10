@@ -14,20 +14,27 @@ public class Program
   // The application entry point is simplified to just run our class.
   public static async Task Main(string[] args)
   {
+    // The elevated relaunch carries a marker: strip it before parsing, never relaunch again,
+    // and keep the (separate) console window open at the end so the results can be read.
+    bool isElevatedChild = args.Contains(ElevationHelper.ElevatedChildMarker);
+    if (isElevatedChild)
+      args = [.. args.Where(a => a != ElevationHelper.ElevatedChildMarker)];
+
     // Check if VSS mode is requested by looking for --vss flag in arguments
     bool vssRequested = args.Any(arg => string.Equals(arg, "--vss", StringComparison.OrdinalIgnoreCase) ||
                                         string.Equals(arg, "-vss", StringComparison.OrdinalIgnoreCase));
+    bool elevationRequired = vssRequested && !isElevatedChild;
 
     // If VSS mode is requested and we're not elevated, try to restart with elevation
-    if (vssRequested && !ElevationHelper.IsElevated())
-      AnsiConsole.MarkupLine("[yellow]VSS mode requires administrator privileges. Requesting elevation...[/]");
+    if (elevationRequired && !ElevationHelper.IsElevated())
+      AnsiConsole.MarkupLine("[yellow]VSS mode requires administrator privileges. Requesting elevation; the run continues in a new window...[/]");
 
-    var elevation = await ElevationHelper.EnsureElevatedAsync(args, vssRequested);
+    var elevation = await ElevationHelper.EnsureElevatedAsync(args, elevationRequired);
     switch (elevation.Outcome)
     {
       case ElevationOutcome.Relaunched:
-        AnsiConsole.MarkupLine("[green]Restarting with elevated privileges...[/]");
-        Environment.Exit(0); // Exit the original process
+        AnsiConsole.MarkupLine($"Elevated run finished with exit code {elevation.ExitCode}.");
+        Environment.Exit(elevation.ExitCode!.Value); // propagate the real result to scripts
         return;
       case ElevationOutcome.Declined:
         AnsiConsole.MarkupLine("[red]Elevation was declined. VSS mode cannot be used without administrator privileges.[/]");
@@ -42,6 +49,11 @@ public class Program
     var app = ConsoleApp.Create();
     app.Add<Program>();
     await app.RunAsync(args);
+
+    if (isElevatedChild && !Console.IsInputRedirected) {
+      AnsiConsole.MarkupLine("[grey]Press any key to close this window.[/]");
+      Console.ReadKey(intercept: true);
+    }
   }
 
   /// <summary>
@@ -185,8 +197,8 @@ public class Program
             manifestEntries = [.. entries.Where(e => e != null && GlobUtils.IsMatch(e.RelativePath!, r.Options.IncludeGlobs, r.Options.ExcludeGlobs))];
             totalFiles = manifestEntries.Count;
 
-            // Efficiently enumerate files and tally sizes
-            var rootDir = r.Options.RootDirectory ?? new DirectoryInfo(r.Options.ChecksumFile.DirectoryName!);
+            // Efficiently enumerate files and tally sizes (from the snapshot in VSS mode)
+            var rootDir = new DirectoryInfo(r.ScanRoot);
             var manifestRelPaths = new HashSet<string>(manifestEntries.Select(e => e.RelativePath!), StringComparer.OrdinalIgnoreCase);
             foreach (var fsi in rootDir.EnumerateFileSystemInfos("*", SearchOption.AllDirectories)) {
               if (fsi is FileInfo fi) {
@@ -204,8 +216,7 @@ public class Program
 
     async Task<RunPhase> Process(RunContext r)
     {
-      r.Stopwatch.Restart(); // time only the verification itself
-      long filesCompleted = 0;
+      r.Stopwatch.Restart(); // time only the processing itself
 
       await AnsiConsole.Progress()
           .AutoClear(true)
@@ -237,7 +248,7 @@ public class Program
               }
             };
             verificationService.FileCompleted += (sender, e) => {
-              mainTask.Value = Interlocked.Increment(ref filesCompleted);
+              mainTask.Increment(1); // atomic inside Spectre; safe from concurrent consumers
               if (e.Bag is ProgressTask fileTask) {
                 fileTask.Value = fileTask.MaxValue;
               }
@@ -289,7 +300,7 @@ public class Program
       }
 
       if (creating) {
-        (files, totalBytes) = await FilesToAddAsync(r.Options, r.RootPath, r.CancellationToken);
+        (files, totalBytes) = await FilesToAddAsync(r.Options, r.RootPath, r.ScanRoot, r.CancellationToken);
         if (files.Count == 0) {
           // Write an empty manifest using ManifestWriter
           using var manifestWriter = new ManifestWriter(r.Options.ChecksumFile);
@@ -298,7 +309,7 @@ public class Program
           return RunPipeline.Exit(r, ExitCodes.Warnings);
         }
       } else {
-        (newFiles, totalBytes) = await NewFilesAsync(r.Options, r.RootPath, r.CancellationToken);
+        (newFiles, totalBytes) = await NewFilesAsync(r.Options, r.RootPath, r.ScanRoot, r.CancellationToken);
         if (newFiles.Count == 0) {
           AnsiConsole.MarkupLine("[yellow]No new files to add to manifest.[/]");
           return RunPipeline.Exit(r, ExitCodes.Warnings);
@@ -310,8 +321,7 @@ public class Program
 
     async Task<RunPhase> Process(RunContext r)
     {
-      long totalBytesRead = 0;
-      long filesProcessed = 0;
+      r.Stopwatch.Restart(); // time only the processing itself
 
       await AnsiConsole.Progress()
           .AutoClear(true)
@@ -342,10 +352,9 @@ public class Program
               if (e.Bag is ProgressTask fileTask) {
                 fileTask.Value = e.BytesRead;
               }
-              mainTask.Value = Interlocked.Add(ref totalBytesRead, e.BytesJustRead);
+              mainTask.Increment(e.BytesJustRead); // atomic inside Spectre; safe from concurrent workers
             };
             manifestService.FileCompleted += (sender, e) => {
-              Interlocked.Increment(ref filesProcessed);
               if (e.Bag is ProgressTask fileTask) {
                 fileTask.Value = fileTask.MaxValue;
               }
@@ -383,8 +392,10 @@ public class Program
     });
   }
 
+  /// <param name="rootPath">The root as the user knows it (for display).</param>
+  /// <param name="scanRoot">Where to enumerate: <paramref name="rootPath"/>, or its VSS snapshot equivalent.</param>
   private static async Task<(IReadOnlyCollection<string> newFiles, long totalBytes)> NewFilesAsync(
-    CliOptions options, string rootPath,
+    CliOptions options, string rootPath, string scanRoot,
     CancellationToken cancellationToken = default)
   {
     List<string> newFiles = [];
@@ -403,10 +414,10 @@ public class Program
         .Spinner(Spinner.Known.Dots)
         .SpinnerStyle(Style.Parse("green"))
         .StartAsync($"Scanning directory: {rootPath}...", async ctx => {
-          var dirInfo = new DirectoryInfo(rootPath);
+          var dirInfo = new DirectoryInfo(scanRoot);
           foreach (var fsi in dirInfo.EnumerateFileSystemInfos("*", SearchOption.AllDirectories)) {
             if (fsi is FileInfo fi) {
-              var relPath = Path.GetRelativePath(rootPath, fi.FullName);
+              var relPath = Path.GetRelativePath(scanRoot, fi.FullName);
               ctx.Status = $"[green]Scanning directory: {rootPath}[/] [grey]({relPath})[/]...";
               if (GlobUtils.IsMatch(relPath, options.IncludeGlobs, options.ExcludeGlobs) && !listedFiles.Contains(relPath)) {
                 newFiles.Add(relPath);
@@ -418,7 +429,9 @@ public class Program
     return (newFiles, totalBytes);
   }
 
-  private static async Task<(IReadOnlyCollection<string> files, long totalBytes)> FilesToAddAsync(CliOptions options, string rootPath, CancellationToken cancellationToken)
+  /// <param name="rootPath">The root as the user knows it (for display).</param>
+  /// <param name="scanRoot">Where to enumerate: <paramref name="rootPath"/>, or its VSS snapshot equivalent.</param>
+  private static async Task<(IReadOnlyCollection<string> files, long totalBytes)> FilesToAddAsync(CliOptions options, string rootPath, string scanRoot, CancellationToken cancellationToken)
   {
     List<string> files = [];
     var totalBytes = 0L;
@@ -427,10 +440,10 @@ public class Program
               .Spinner(Spinner.Known.Dots)
               .SpinnerStyle(Style.Parse("green"))
               .StartAsync($"Calculating total size: {rootPath}...", async ctx => {
-                var dirInfo = new DirectoryInfo(rootPath);
+                var dirInfo = new DirectoryInfo(scanRoot);
                 foreach (var fsi in dirInfo.EnumerateFileSystemInfos("*", SearchOption.AllDirectories)) {
                   if (fsi is FileInfo fi) {
-                    var relPath = Path.GetRelativePath(rootPath, fi.FullName);
+                    var relPath = Path.GetRelativePath(scanRoot, fi.FullName);
                     ctx.Status = $"[green]Calculating total size: {rootPath}[/] [grey]({relPath})[/]...";
 
                     if (GlobUtils.IsMatch(relPath, options.IncludeGlobs, options.ExcludeGlobs)) {

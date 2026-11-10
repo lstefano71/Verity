@@ -5,10 +5,17 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <PublishAot>true</PublishAot>
-    <StaticLibrary>true</StaticLibrary>
     <AssemblyName>Verity</AssemblyName>
   </PropertyGroup>
+
+  <!--
+    Release packaging (see the Publish task in build.cake): a self-contained single-file exe
+    that extracts its contents to disk on first run.
+    Native AOT and trimming are NOT usable: AlphaVSS loads its platform-specific C++/CLI
+    assembly (AlphaVSS.x64.dll) at runtime via AssemblyLoadContext.LoadFromAssemblyPath,
+    which Native AOT cannot do. IncludeAllContentForSelfExtract is required so that the
+    assembly exists as a real file next to AlphaVSS.Common.dll.
+  -->
 
   <ItemGroup>
     <InternalsVisibleTo Include="Verity.Tests" />

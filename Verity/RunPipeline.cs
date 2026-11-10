@@ -47,10 +47,18 @@ internal sealed class RunContext(CliOptions options, int threads, CancellationTo
 
   public string RootPath { get; } = options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName!;
   public DateTime StartTime { get; } = DateTime.Now;
-  public Stopwatch Stopwatch { get; } = Stopwatch.StartNew();
+
+  /// <summary>Times the Process phase only (started there), so all commands report the same thing.</summary>
+  public Stopwatch Stopwatch { get; } = new();
 
   public VssSnapshotManager? VssManager { get; set; }
   public VssPathResolver? VssResolver { get; set; }
+
+  /// <summary>
+  /// Where to enumerate files: <see cref="RootPath"/>, or its snapshot equivalent in VSS mode so
+  /// the scan sees the same point-in-time view as the hashing.
+  /// </summary>
+  public string ScanRoot => VssResolver?.ResolveDirectoryPath(RootPath) ?? RootPath;
 
   public FinalSummary Summary { get; set; } = new(0, 0, 0, 0, 0, []);
 
@@ -81,7 +89,9 @@ internal static class RunPipeline
       return run.ExitCode;
     } finally {
       if (run.VssManager != null) {
-        AnsiConsole.MarkupLine("[yellow]Cleaning up VSS snapshot...[/]");
+        // A failed creation has already rolled itself back; only announce real cleanup.
+        if (run.VssManager.IsSnapshotActive)
+          AnsiConsole.MarkupLine("[yellow]Cleaning up VSS snapshot...[/]");
         run.VssManager.Dispose();
       }
     }

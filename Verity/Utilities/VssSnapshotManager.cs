@@ -144,7 +144,7 @@ public class VssSnapshotManager : IDisposable
 
         try
         {
-            await Task.Run(() => CreateSnapshotInternal(combinedCts.Token), combinedCts.Token);
+            await Task.Run(() => CreateSnapshotInternalAsync(combinedCts.Token), combinedCts.Token);
             Transition(VssSnapshotState.Creating, VssSnapshotState.Active);
             return SnapshotDeviceObject!;
         }
@@ -170,10 +170,12 @@ public class VssSnapshotManager : IDisposable
     }
 
     /// <summary>
-    /// Performs the VSS creation protocol synchronously, recording each completed step in
-    /// <see cref="_step"/>. Does not clean up; the caller rolls back based on <see cref="_step"/>.
+    /// Performs the VSS creation protocol, recording each completed step in <see cref="_step"/>.
+    /// Does not clean up; the caller rolls back based on <see cref="_step"/>. The two potentially
+    /// long steps (writer preparation and the commit) use the VSS asynchronous calls, so the
+    /// timeout and user cancellation interrupt them instead of waiting for them to finish.
     /// </summary>
-    private void CreateSnapshotInternal(CancellationToken cancellationToken)
+    private async Task CreateSnapshotInternalAsync(CancellationToken cancellationToken)
     {
         _backupComponents = VssFactoryProvider.Default.GetVssFactory().CreateVssBackupComponents();
         Advance(VssCreationStep.ComponentsLoaded, cancellationToken);
@@ -190,10 +192,10 @@ public class VssSnapshotManager : IDisposable
         _snapshotId = _backupComponents.AddToSnapshotSet(VolumeToSnapshot, Guid.Empty);
         Advance(VssCreationStep.VolumeAdded, cancellationToken);
 
-        _backupComponents.PrepareForBackup();
+        await _backupComponents.PrepareForBackupAsync(cancellationToken);
         Advance(VssCreationStep.Prepared, cancellationToken);
 
-        _backupComponents.DoSnapshotSet();
+        await _backupComponents.DoSnapshotSetAsync(cancellationToken);
         Advance(VssCreationStep.SnapshotTaken, cancellationToken);
 
         var snapshotProperties = _backupComponents.GetSnapshotProperties(_snapshotId);
@@ -237,17 +239,26 @@ public class VssSnapshotManager : IDisposable
     /// </summary>
     private void CleanupSnapshot()
     {
-        // The snapshot set only exists on the VSS service once DoSnapshotSet has completed.
-        if (_backupComponents != null && _step >= VssCreationStep.SnapshotTaken)
+        if (_backupComponents != null)
         {
             try
             {
-                _backupComponents.DeleteSnapshotSet(_snapshotSetId, false);
+                if (_step >= VssCreationStep.SnapshotTaken)
+                {
+                    // The snapshot set exists on the VSS service once DoSnapshotSet has completed.
+                    _backupComponents.DeleteSnapshotSet(_snapshotSetId, false);
+                }
+                else if (_step >= VssCreationStep.SnapshotSetStarted)
+                {
+                    // Between StartSnapshotSet and a completed DoSnapshotSet, VSS requires
+                    // AbortBackup so writers are released (ignored if nothing is under way).
+                    _backupComponents.AbortBackup();
+                }
             }
             catch (Exception ex)
             {
-                // Log but don't throw - we're in cleanup
-                Console.WriteLine($"Warning: Failed to delete VSS snapshot: {ex.Message}");
+                // Log but don't throw - we're in cleanup. stderr keeps redirected output clean.
+                Console.Error.WriteLine($"Warning: Failed to clean up VSS snapshot: {ex.Message}");
             }
         }
 
