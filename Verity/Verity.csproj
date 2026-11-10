@@ -11,6 +11,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Verity.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="AlphaVSS" Version="2.0.3" />
     <PackageReference Include="ConsoleAppFramework" Version="5.5.0">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

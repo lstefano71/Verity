@@ -80,7 +80,7 @@ public class Program
         GlobUtils.NormalizeGlobs(exclude, true),
         vss);
       return await RunVerification(options, threads ?? Environment.ProcessorCount, cancellationToken);
-    } catch (OperationCanceledException) { AnsiConsole.MarkupLine("[red]Interrupted by user[/]"); return -2; }
+    } catch (OperationCanceledException) { AnsiConsole.MarkupLine("[red]Interrupted by user[/]"); return ExitCodes.Interrupted; }
   }
 
   /// <summary>
@@ -121,7 +121,7 @@ public class Program
       return await RunCreateManifest(options, threads ?? Environment.ProcessorCount, cancellationToken);
     } catch (OperationCanceledException) {
       AnsiConsole.MarkupLine("[red]Interrupted by user[/]");
-      return -2;
+      return ExitCodes.Interrupted;
     }
   }
 
@@ -163,170 +163,110 @@ public class Program
       return await RunAddToManifest(options, threads ?? Environment.ProcessorCount, cancellationToken);
     } catch (OperationCanceledException) {
       AnsiConsole.MarkupLine("[red]Interrupted by user[/]");
-      return -2;
+      return ExitCodes.Interrupted;
     }
   }
 
   public static async Task<int> RunVerification(CliOptions options, int threads, CancellationToken cancellationToken)
   {
-    var startTime = DateTime.Now;
-    VssSnapshotManager? vssManager = null;
-    VssPathResolver? vssResolver = null;
-
-    try
-    {
-      // Create VSS snapshot if requested
-      if (options.UseVss)
-      {
-        var rootPath = options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName!;
-        var volumeRoot = Path.GetPathRoot(rootPath);
-        
-        if (string.IsNullOrEmpty(volumeRoot))
-        {
-          AnsiConsole.MarkupLine("[red]Error: Unable to determine volume root for VSS snapshot.[/]");
-          return (int)VssErrorCode.VolumeNotSupported;
-        }
-
-        AnsiConsole.MarkupLine($"[yellow]Creating VSS snapshot for volume {volumeRoot}...[/]");
-        
-        try
-        {
-          vssManager = new VssSnapshotManager(volumeRoot);
-          await AnsiConsole.Status()
-              .Spinner(Spinner.Known.Dots)
-              .SpinnerStyle(Style.Parse("yellow"))
-              .StartAsync("Creating volume snapshot...", async ctx => {
-                await vssManager.CreateSnapshotAsync(cancellationToken);
-              });
-          
-          vssResolver = vssManager.CreatePathResolver();
-          AnsiConsole.MarkupLine($"[green]VSS snapshot created successfully.[/]");
-        }
-        catch (OperationCanceledException)
-        {
-          throw; // user cancellation is handled by the command, not reported as a VSS failure
-        }
-        catch (VssSnapshotException ex)
-        {
-          AnsiConsole.MarkupLine($"[red]VSS Error: {ex.Message}[/]");
-          return (int)VssErrorCode.SnapshotCreationFailed;
-        }
-        catch (Exception ex)
-        {
-          AnsiConsole.MarkupLine($"[red]Unexpected error creating VSS snapshot: {ex.Message}[/]");
-          return (int)VssErrorCode.SnapshotCreationFailed;
-        }
-      }
-    var headerPanel = Utilities.BuildHeaderPanel(
-        "Verification Info",
-        startTime,
-        options.ChecksumFile.Name,
-        options.Algorithm,
-        options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName!,
-        options.IncludeGlobs,
-        options.ExcludeGlobs,
-        options.UseVss ? "VSS Snapshot Mode" : null
-    );
-    AnsiConsole.Write(headerPanel);
-
+    var run = new RunContext(options, threads, cancellationToken);
     IReadOnlyList<ManifestEntry> manifestEntries = [];
     int totalFiles = 0;
     long totalBytes = 0;
-    await AnsiConsole.Status()
-        .Spinner(Spinner.Known.Dots)
-        .SpinnerStyle(Style.Parse("green"))
-        .StartAsync($"Reading manifest: {options.ChecksumFile.FullName}...", async ctx => {
-          var reader = new ManifestReader(options.ChecksumFile, options.RootDirectory);
-          var entries = await reader.ReadEntriesAsync(cancellationToken);
-          manifestEntries = [.. entries.Where(e => e != null && GlobUtils.IsMatch(e.RelativePath!, options.IncludeGlobs, options.ExcludeGlobs))];
-          totalFiles = manifestEntries.Count;
 
-          // Efficiently enumerate files and tally sizes
-          var rootDir = options.RootDirectory ?? new DirectoryInfo(options.ChecksumFile.DirectoryName!);
-          var manifestRelPaths = new HashSet<string>(manifestEntries.Select(e => e.RelativePath!), StringComparer.OrdinalIgnoreCase);
-          foreach (var fsi in rootDir.EnumerateFileSystemInfos("*", SearchOption.AllDirectories)) {
-            if (fsi is FileInfo fi) {
-              var relPath = Path.GetRelativePath(rootDir.FullName, fi.FullName);
-              ctx.Status = $"[green]Reading manifest: {options.ChecksumFile.FullName}[/] [grey]({relPath})[/]...";
-              if (manifestRelPaths.Contains(relPath)) {
-                totalBytes += fi.Length;
-              }
-              //              await Task.Delay(10, cancellationToken); 
-            }
-          }
-          await Task.Delay(100, cancellationToken); // Ensure spinner is visible
-        });
-
-    var stopwatch = Stopwatch.StartNew();
-    FinalSummary summary = new(0, 0, 0, 0, 0, []);
-
-    await AnsiConsole.Progress()
-        .AutoClear(true)
-        .HideCompleted(true)
-        .Columns([
-            new TaskDescriptionColumn(),
-            new ProgressBarColumn(),
-            new PercentageColumn(),
-            new RemainingTimeColumn(),
-            new SpinnerColumn(),
-        ])
-        .StartAsync(async ctx => {
-          var mainTask = ctx.AddTask($"[green]Verifying files ({totalBytes.Bytes().Humanize()})[/]", maxValue: totalFiles);
-          var verificationService = new VerificationService();
-          long filesCompleted = 0;
-          
-          // Set VSS resolver if available
-          if (vssResolver != null)
-          {
-            verificationService.VssResolver = vssResolver;
-          }
-
-          verificationService.FileStarted += (sender, e) => {
-            int padLen = 50;
-            var safeRelPath = Utilities.AbbreviateAndPadPathForDisplay(e.Entry.RelativePath, padLen);
-            e.Bag = ctx.AddTask(safeRelPath, maxValue: e.FileSize > 0 ? e.FileSize : 1);
-          };
-          verificationService.FileProgress += (sender, e) => {
-            if (e.Bag is ProgressTask fileTask) {
-              fileTask.Value = e.BytesRead;
-            }
-          };
-          verificationService.FileCompleted += (sender, e) => {
-            mainTask.Value = Interlocked.Increment(ref filesCompleted);
-            if (e.Bag is ProgressTask fileTask) {
-              fileTask.Value = fileTask.MaxValue;
-            }
-          };
-          verificationService.FileFoundNotInChecksumList += (path) => { };
-
-          summary = await verificationService.VerifyChecksumsAsync(options, manifestEntries, threads, cancellationToken);
-          mainTask.StopTask();
-        });
-
-    stopwatch.Stop();
-    AnsiConsole.WriteLine();
-    AnsiConsole.MarkupLine("[bold underline]Verification Complete[/]");
-
-    var presenter = new ResultsPresenter();
-    ResultsPresenter.RenderSummaryTable(summary, stopwatch.Elapsed);
-    if (options.ShowTable)
-      ResultsPresenter.RenderDiagnosticsTable(summary);
-    if (options.TsvReportFile != null)
-      await ResultsPresenter.WriteErrorReportAsync(summary, options.TsvReportFile);
-
-    if (summary.ErrorCount > 0) return -1;
-    if (summary.WarningCount > 0) return 1;
-    return 0;
-    }
-    finally
+    async Task<RunPhase> Prepare(RunContext r)
     {
-      // Cleanup VSS snapshot
-      if (vssManager != null)
-      {
-        AnsiConsole.MarkupLine("[yellow]Cleaning up VSS snapshot...[/]");
-        vssManager.Dispose();
-      }
+      await AnsiConsole.Status()
+          .Spinner(Spinner.Known.Dots)
+          .SpinnerStyle(Style.Parse("green"))
+          .StartAsync($"Reading manifest: {r.Options.ChecksumFile.FullName}...", async ctx => {
+            var reader = new ManifestReader(r.Options.ChecksumFile, r.Options.RootDirectory);
+            var entries = await reader.ReadEntriesAsync(r.CancellationToken);
+            manifestEntries = [.. entries.Where(e => e != null && GlobUtils.IsMatch(e.RelativePath!, r.Options.IncludeGlobs, r.Options.ExcludeGlobs))];
+            totalFiles = manifestEntries.Count;
+
+            // Efficiently enumerate files and tally sizes
+            var rootDir = r.Options.RootDirectory ?? new DirectoryInfo(r.Options.ChecksumFile.DirectoryName!);
+            var manifestRelPaths = new HashSet<string>(manifestEntries.Select(e => e.RelativePath!), StringComparer.OrdinalIgnoreCase);
+            foreach (var fsi in rootDir.EnumerateFileSystemInfos("*", SearchOption.AllDirectories)) {
+              if (fsi is FileInfo fi) {
+                var relPath = Path.GetRelativePath(rootDir.FullName, fi.FullName);
+                ctx.Status = $"[green]Reading manifest: {r.Options.ChecksumFile.FullName}[/] [grey]({relPath})[/]...";
+                if (manifestRelPaths.Contains(relPath)) {
+                  totalBytes += fi.Length;
+                }
+              }
+            }
+            await Task.Delay(100, r.CancellationToken); // Ensure spinner is visible
+          });
+      return RunPhase.Process;
     }
+
+    async Task<RunPhase> Process(RunContext r)
+    {
+      r.Stopwatch.Restart(); // time only the verification itself
+      long filesCompleted = 0;
+
+      await AnsiConsole.Progress()
+          .AutoClear(true)
+          .HideCompleted(true)
+          .Columns([
+              new TaskDescriptionColumn(),
+              new ProgressBarColumn(),
+              new PercentageColumn(),
+              new RemainingTimeColumn(),
+              new SpinnerColumn(),
+          ])
+          .StartAsync(async ctx => {
+            var mainTask = ctx.AddTask($"[green]Verifying files ({totalBytes.Bytes().Humanize()})[/]", maxValue: totalFiles);
+            var verificationService = new VerificationService();
+
+            // Set VSS resolver if available
+            if (r.VssResolver != null) {
+              verificationService.VssResolver = r.VssResolver;
+            }
+
+            verificationService.FileStarted += (sender, e) => {
+              int padLen = 50;
+              var safeRelPath = Utilities.AbbreviateAndPadPathForDisplay(e.Entry.RelativePath, padLen);
+              e.Bag = ctx.AddTask(safeRelPath, maxValue: e.FileSize > 0 ? e.FileSize : 1);
+            };
+            verificationService.FileProgress += (sender, e) => {
+              if (e.Bag is ProgressTask fileTask) {
+                fileTask.Value = e.BytesRead;
+              }
+            };
+            verificationService.FileCompleted += (sender, e) => {
+              mainTask.Value = Interlocked.Increment(ref filesCompleted);
+              if (e.Bag is ProgressTask fileTask) {
+                fileTask.Value = fileTask.MaxValue;
+              }
+            };
+            verificationService.FileFoundNotInChecksumList += (path) => { };
+
+            r.Summary = await verificationService.VerifyChecksumsAsync(r.Options, manifestEntries, r.Threads, r.CancellationToken);
+            mainTask.StopTask();
+          });
+
+      r.Stopwatch.Stop();
+      return RunPhase.Report;
+    }
+
+    async Task<RunPhase> Report(RunContext r)
+    {
+      AnsiConsole.WriteLine();
+      AnsiConsole.MarkupLine("[bold underline]Verification Complete[/]");
+      await RunPipeline.RenderReportAsync(r);
+      return RunPhase.Finished;
+    }
+
+    return await RunPipeline.RunAsync(run, new Dictionary<RunPhase, PhaseHandler> {
+      [RunPhase.VssSetup] = RunPipeline.VssSetupAsync,
+      [RunPhase.Header] = RunPipeline.Header("Verification Info"),
+      [RunPhase.Prepare] = Prepare,
+      [RunPhase.Process] = Process,
+      [RunPhase.Report] = Report,
+    });
   }
 
   public static async Task<int> RunManifestOperation(
@@ -335,167 +275,112 @@ public class Program
     int threads,
     CancellationToken cancellationToken)
   {
-    var startTime = DateTime.Now;
-    var stopwatch = Stopwatch.StartNew();
-    var rootPath = options.RootDirectory?.FullName ?? options.ChecksumFile.DirectoryName!;
-    VssSnapshotManager? vssManager = null;
-    VssPathResolver? vssResolver = null;
-
-    try
-    {
-      // Create VSS snapshot if requested
-      if (options.UseVss)
-      {
-        var volumeRoot = Path.GetPathRoot(rootPath);
-        
-        if (string.IsNullOrEmpty(volumeRoot))
-        {
-          AnsiConsole.MarkupLine("[red]Error: Unable to determine volume root for VSS snapshot.[/]");
-          return (int)VssErrorCode.VolumeNotSupported;
-        }
-
-        AnsiConsole.MarkupLine($"[yellow]Creating VSS snapshot for volume {volumeRoot}...[/]");
-        
-        try
-        {
-          vssManager = new VssSnapshotManager(volumeRoot);
-          await AnsiConsole.Status()
-              .Spinner(Spinner.Known.Dots)
-              .SpinnerStyle(Style.Parse("yellow"))
-              .StartAsync("Creating volume snapshot...", async ctx => {
-                await vssManager.CreateSnapshotAsync(cancellationToken);
-              });
-          
-          vssResolver = vssManager.CreatePathResolver();
-          AnsiConsole.MarkupLine($"[green]VSS snapshot created successfully.[/]");
-        }
-        catch (OperationCanceledException)
-        {
-          throw; // user cancellation is handled by the command, not reported as a VSS failure
-        }
-        catch (VssSnapshotException ex)
-        {
-          AnsiConsole.MarkupLine($"[red]VSS Error: {ex.Message}[/]");
-          return (int)VssErrorCode.SnapshotCreationFailed;
-        }
-        catch (Exception ex)
-        {
-          AnsiConsole.MarkupLine($"[red]Unexpected error creating VSS snapshot: {ex.Message}[/]");
-          return (int)VssErrorCode.SnapshotCreationFailed;
-        }
-      }
-
-    var headerPanel = Utilities.BuildHeaderPanel(
-        mode == ManifestOperationMode.Create ? "Manifest Creation Info" : "Manifest Add Info",
-        startTime,
-        options.ChecksumFile.Name,
-        options.Algorithm,
-        rootPath,
-        options.IncludeGlobs,
-        options.ExcludeGlobs,
-        options.UseVss ? "VSS Snapshot Mode" : null
-    );
-    AnsiConsole.Write(headerPanel);
-
-    if (string.IsNullOrEmpty(rootPath)) {
-      AnsiConsole.MarkupLine("[red]Error: Root directory must be specified and exist.[/]");
-      return -1;
-    }
-
+    var run = new RunContext(options, threads, cancellationToken);
+    var creating = mode == ManifestOperationMode.Create;
     IReadOnlyCollection<string> files = [];
     IReadOnlyCollection<string> newFiles = [];
     long totalBytes = 0;
-    if (mode == ManifestOperationMode.Create) {
-      (files, totalBytes) = await FilesToAddAsync(options, rootPath, cancellationToken);
-      if (files.Count == 0) {
-        // Write an empty manifest using ManifestWriter
-        using var manifestWriter = new ManifestWriter(options.ChecksumFile);
-        await manifestWriter.WriteAllEntriesAsync([]);
-        AnsiConsole.MarkupLine("[yellow]No files found in the specified root directory.[/]");
-        return 1;
-      }
-    } else {
-      (newFiles, totalBytes) = await NewFilesAsync(options, rootPath, cancellationToken);
-      if (newFiles.Count == 0) {
-        AnsiConsole.MarkupLine("[yellow]No new files to add to manifest.[/]");
-        return 1;
-      }
-    }
-    await Task.Delay(100, cancellationToken);
 
-    long totalBytesRead = 0;
-    int filesProcessed = 0;
-    FinalSummary summary = new(0, 0, 0, 0, 0, []);
-    await AnsiConsole.Progress()
-        .AutoClear(true)
-        .HideCompleted(true)
-        .Columns(
-            new TaskDescriptionColumn(),
-            new ProgressBarColumn(),
-            new PercentageColumn(),
-            new RemainingTimeColumn(),
-            new SpinnerColumn()
-        )
-        .StartAsync(async ctx => {
-          var mainTask = ctx.AddTask($"[green]{(mode == ManifestOperationMode.Create ? "Creating manifest" : "Adding to manifest")} ({totalBytes.Bytes().Humanize()})[/]", maxValue: totalBytes);
-          var manifestService = new ManifestCreationService();
-          
-          // Set VSS resolver if available
-          if (vssResolver != null)
-          {
-            manifestService.VssResolver = vssResolver;
-          }
-          manifestService.FileStarted += (sender, e) => {
-            int padLen = 50;
-            var safeRelPath = Utilities.AbbreviateAndPadPathForDisplay(e.RelativePath, padLen);
-            var fileTask = ctx.AddTask(safeRelPath, maxValue: e.FileSize > 0 ? e.FileSize : 1);
-            e.Bag = fileTask;
-            fileTask.Value = 0;
-          };
-          manifestService.FileProgress += (sender, e) => {
-            if (e.Bag is ProgressTask fileTask) {
-              fileTask.Value = e.BytesRead;
-            }
-            mainTask.Value = Interlocked.Add(ref totalBytesRead, e.BytesJustRead);
-          };
-          manifestService.FileCompleted += (sender, e) => {
-            Interlocked.Increment(ref filesProcessed);
-            if (e.Bag is ProgressTask fileTask) {
-              fileTask.Value = fileTask.MaxValue;
-            }
-          };
-          if (mode == ManifestOperationMode.Create)
-            summary = await manifestService.CreateManifestAsync(options.ChecksumFile,
-              new DirectoryInfo(rootPath), options.Algorithm,
-              files, threads, cancellationToken);
-          else
-            summary = await manifestService.AddToManifestAsync(options.ChecksumFile,
-              new DirectoryInfo(rootPath), options.Algorithm,
-              newFiles, threads, cancellationToken);
-          mainTask.StopTask();
-        });
-    stopwatch.Stop();
-    AnsiConsole.MarkupLine($"[green]Manifest {(mode == ManifestOperationMode.Create ? "created" : "updated")}: [/] {options.ChecksumFile.FullName}");
-    AnsiConsole.WriteLine();
-    AnsiConsole.MarkupLine($"[bold underline]{(mode == ManifestOperationMode.Create ? "Creation" : "Add")} Complete[/]");
-    ResultsPresenter.RenderSummaryTable(summary, stopwatch.Elapsed);
-    if (options.ShowTable)
-      ResultsPresenter.RenderDiagnosticsTable(summary);
-    if (options.TsvReportFile != null)
-      await ResultsPresenter.WriteErrorReportAsync(summary, options.TsvReportFile);
-    if (summary.ErrorCount > 0) return -1;
-    if (summary.WarningCount > 0) return 1;
-    return 0;
-    }
-    finally
+    async Task<RunPhase> Prepare(RunContext r)
     {
-      // Cleanup VSS snapshot
-      if (vssManager != null)
-      {
-        AnsiConsole.MarkupLine("[yellow]Cleaning up VSS snapshot...[/]");
-        vssManager.Dispose();
+      if (string.IsNullOrEmpty(r.RootPath)) {
+        AnsiConsole.MarkupLine("[red]Error: Root directory must be specified and exist.[/]");
+        return RunPipeline.Exit(r, ExitCodes.Errors);
       }
+
+      if (creating) {
+        (files, totalBytes) = await FilesToAddAsync(r.Options, r.RootPath, r.CancellationToken);
+        if (files.Count == 0) {
+          // Write an empty manifest using ManifestWriter
+          using var manifestWriter = new ManifestWriter(r.Options.ChecksumFile);
+          await manifestWriter.WriteAllEntriesAsync([]);
+          AnsiConsole.MarkupLine("[yellow]No files found in the specified root directory.[/]");
+          return RunPipeline.Exit(r, ExitCodes.Warnings);
+        }
+      } else {
+        (newFiles, totalBytes) = await NewFilesAsync(r.Options, r.RootPath, r.CancellationToken);
+        if (newFiles.Count == 0) {
+          AnsiConsole.MarkupLine("[yellow]No new files to add to manifest.[/]");
+          return RunPipeline.Exit(r, ExitCodes.Warnings);
+        }
+      }
+      await Task.Delay(100, r.CancellationToken);
+      return RunPhase.Process;
     }
+
+    async Task<RunPhase> Process(RunContext r)
+    {
+      long totalBytesRead = 0;
+      long filesProcessed = 0;
+
+      await AnsiConsole.Progress()
+          .AutoClear(true)
+          .HideCompleted(true)
+          .Columns(
+              new TaskDescriptionColumn(),
+              new ProgressBarColumn(),
+              new PercentageColumn(),
+              new RemainingTimeColumn(),
+              new SpinnerColumn()
+          )
+          .StartAsync(async ctx => {
+            var mainTask = ctx.AddTask($"[green]{(creating ? "Creating manifest" : "Adding to manifest")} ({totalBytes.Bytes().Humanize()})[/]", maxValue: totalBytes);
+            var manifestService = new ManifestCreationService();
+
+            // Set VSS resolver if available
+            if (r.VssResolver != null) {
+              manifestService.VssResolver = r.VssResolver;
+            }
+            manifestService.FileStarted += (sender, e) => {
+              int padLen = 50;
+              var safeRelPath = Utilities.AbbreviateAndPadPathForDisplay(e.RelativePath, padLen);
+              var fileTask = ctx.AddTask(safeRelPath, maxValue: e.FileSize > 0 ? e.FileSize : 1);
+              e.Bag = fileTask;
+              fileTask.Value = 0;
+            };
+            manifestService.FileProgress += (sender, e) => {
+              if (e.Bag is ProgressTask fileTask) {
+                fileTask.Value = e.BytesRead;
+              }
+              mainTask.Value = Interlocked.Add(ref totalBytesRead, e.BytesJustRead);
+            };
+            manifestService.FileCompleted += (sender, e) => {
+              Interlocked.Increment(ref filesProcessed);
+              if (e.Bag is ProgressTask fileTask) {
+                fileTask.Value = fileTask.MaxValue;
+              }
+            };
+            if (creating)
+              r.Summary = await manifestService.CreateManifestAsync(r.Options.ChecksumFile,
+                new DirectoryInfo(r.RootPath), r.Options.Algorithm,
+                files, r.Threads, r.CancellationToken);
+            else
+              r.Summary = await manifestService.AddToManifestAsync(r.Options.ChecksumFile,
+                new DirectoryInfo(r.RootPath), r.Options.Algorithm,
+                newFiles, r.Threads, r.CancellationToken);
+            mainTask.StopTask();
+          });
+
+      r.Stopwatch.Stop();
+      return RunPhase.Report;
+    }
+
+    async Task<RunPhase> Report(RunContext r)
+    {
+      AnsiConsole.MarkupLine($"[green]Manifest {(creating ? "created" : "updated")}: [/] {r.Options.ChecksumFile.FullName}");
+      AnsiConsole.WriteLine();
+      AnsiConsole.MarkupLine($"[bold underline]{(creating ? "Creation" : "Add")} Complete[/]");
+      await RunPipeline.RenderReportAsync(r);
+      return RunPhase.Finished;
+    }
+
+    return await RunPipeline.RunAsync(run, new Dictionary<RunPhase, PhaseHandler> {
+      [RunPhase.VssSetup] = RunPipeline.VssSetupAsync,
+      [RunPhase.Header] = RunPipeline.Header(creating ? "Manifest Creation Info" : "Manifest Add Info"),
+      [RunPhase.Prepare] = Prepare,
+      [RunPhase.Process] = Process,
+      [RunPhase.Report] = Report,
+    });
   }
 
   private static async Task<(IReadOnlyCollection<string> newFiles, long totalBytes)> NewFilesAsync(
