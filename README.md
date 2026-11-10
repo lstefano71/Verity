@@ -32,7 +32,7 @@ It is delivered as a single, self-contained executable with no external .NET run
 * **Automation-Friendly:** Distinct exit codes for success, warning, error, and cancellation. Machine-readable TSV error/warning reports to file or `stderr`.
 * **Robust Error Handling:** Differentiates between errors (e.g., hash mismatch) and warnings (e.g., newer file, unlisted files).
 * **Resource Management:** Operates within reasonable memory limits; does not read all files into memory at once.
-* **Self-Contained Executable:** Native AOT build for Windows, no external .NET runtime required.
+* **Self-Contained Executable:** Single-file build for Windows, no external .NET runtime required. (Not Native AOT: the VSS library needs runtime assembly loading. On first run the exe extracts its contents to `%TEMP%\.net\Verity`.)
 
 ---
 

@@ -82,22 +82,26 @@ Task("Build")
     Information("Project compiled in {0} mode.", configuration);
 });
 
-Task("AOT-Compile")
+Task("Publish")
     .IsDependentOn("Build")
     .Does(() => {
+    // Self-contained single-file exe that self-extracts on first run. Not Native AOT and not
+    // trimmed: AlphaVSS loads its C++/CLI platform assembly from disk at runtime (see Verity.csproj).
     DotNetPublish("./Verity/Verity.csproj", new DotNetPublishSettings {
         Configuration = configuration,
         OutputDirectory = publishDir,
+        Runtime = "win-x64",
+        SelfContained = true,
+        PublishSingleFile = true,
         ArgumentCustomization = args => args
-            .Append("/p:PublishAot=true")
-            .Append("/p:PublishTrimmed=true")
-            .Append("-r win-x64") // Change runtime identifier as needed
+            .Append("/p:IncludeAllContentForSelfExtract=true")
+            .Append("/p:EnableCompressionInSingleFile=true")
     });
-    Information("AOT compilation completed to: {0}", publishDir);
+    Information("Published to: {0}", publishDir);
 });
 
 Task("Package")
-    .IsDependentOn("AOT-Compile")
+    .IsDependentOn("Publish")
     .IsDependentOn("Run-Tests")
     .Does(() => {
     // 1. Get Version Information from Nerdbank.GitVersioning tool
@@ -206,5 +210,8 @@ Task("Run-Tests")
       }
    }
 });
+
+Task("Default")
+    .IsDependentOn("Package");
 
 RunTarget(target);
