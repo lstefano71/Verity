@@ -18,7 +18,7 @@ var projectName = "Verity"; // Project base name for artifact
 // FIX: Reverted to using .Combine() which is the correct method for chaining path segments.
 var publishDir = Directory("./Verity/bin")
    + Directory(configuration)
-   + Directory("net9.0")
+   + Directory("net10.0")
    + Directory("win-x64")
    + Directory("publish");
 
@@ -144,8 +144,9 @@ Task("Package")
 
 Task("Run-Tests")
 .Does(() => {
-   var verityExe = System.IO.Path.Combine(Directory("./Verity/bin")
-   + Directory(configuration) + Directory("net9.0"), "Verity.exe");
+   // Absolute path: Cake 6 no longer resolves relative executable paths against the working directory.
+   var verityExe = MakeAbsolute(Directory("./Verity/bin")
+   + Directory(configuration) + Directory("net10.0")).CombineWithFilePath("Verity.exe").FullPath;
    var algorithms = new[] {
       new { Name = "SHA256", Ext = ".sha256" },
       new { Name = "MD5", Ext = ".md5" },

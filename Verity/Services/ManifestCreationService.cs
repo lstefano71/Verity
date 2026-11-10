@@ -92,14 +92,14 @@ public class ManifestCreationService
                       }
                       hash = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
                       Interlocked.Add(ref totalBytesRead, fileSize);
-                      success++;
+                      Interlocked.Increment(ref success);
                     } finally {
                       ArrayPool<byte>.Shared.Return(buffer);
                     }
                     newEntries.Add((hash, relPath));
                   } catch (Exception ex) {
                     // File read error
-                    errors++;
+                    Interlocked.Increment(ref errors);
                     problematicResults.Add(new VerificationResult(
                       new ChecksumEntry("", relPath),
                       ResultStatus.Error,

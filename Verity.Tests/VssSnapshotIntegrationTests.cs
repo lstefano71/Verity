@@ -2,189 +2,186 @@ using Verity.Utilities;
 
 namespace Verity.Tests.IntegrationTests;
 
-[TestFixture]
-[Category("Integration")]
-[Platform("Win")]
+/// <summary>
+/// Runs only when elevated on Windows AND the environment variable VERITY_VSS_TESTS=1 is set
+/// (xUnit equivalent of NUnit's [Explicit]); these tests create real shadow copies.
+/// </summary>
+public sealed class ElevatedVssFactAttribute : FactAttribute
+{
+    public ElevatedVssFactAttribute()
+    {
+        if (!OperatingSystem.IsWindows())
+            Skip = "Windows only.";
+        else if (!ElevationHelper.IsElevated())
+            Skip = "Requires elevation.";
+        else if (Environment.GetEnvironmentVariable("VERITY_VSS_TESTS") != "1")
+            Skip = "Set VERITY_VSS_TESTS=1 to run tests that create real VSS snapshots.";
+    }
+}
+
+/// <summary>Runs only when NOT elevated (checks the failure path of snapshot creation).</summary>
+public sealed class NonElevatedWindowsFactAttribute : FactAttribute
+{
+    public NonElevatedWindowsFactAttribute()
+    {
+        if (!OperatingSystem.IsWindows())
+            Skip = "Windows only.";
+        else if (ElevationHelper.IsElevated())
+            Skip = "Only meaningful without elevation.";
+    }
+}
+
 public class VssSnapshotIntegrationTests
 {
-    [Test]
-    [Explicit("Requires elevation and actual VSS capability")]
-    public async Task VssSnapshotManager_CreateSnapshot_RequiresElevation()
-    {
-        // This test should only be run manually when elevated
-        if (!ElevationHelper.IsElevated())
-        {
-            Assert.Ignore("This test requires elevation to run.");
-        }
+    private static string VolumeRoot => Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\";
 
-        var volumeRoot = Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\";
-        
-        using var vssManager = new VssSnapshotManager(volumeRoot);
-        
-        // Act & Assert
-        Assert.DoesNotThrowAsync(async () =>
-        {
-            var snapshotPath = await vssManager.CreateSnapshotAsync();
-            Assert.That(snapshotPath, Is.Not.Null.And.Not.Empty);
-            Assert.That(vssManager.IsSnapshotActive, Is.True);
-        });
+    // ---- Real VSS (opt-in, elevated) -------------------------------------------------
+
+    [ElevatedVssFact]
+    public async Task CreateSnapshot_Succeeds_AndBecomesActive()
+    {
+        using var vssManager = new VssSnapshotManager(VolumeRoot);
+
+        var snapshotPath = await vssManager.CreateSnapshotAsync();
+
+        Assert.False(string.IsNullOrEmpty(snapshotPath));
+        Assert.True(vssManager.IsSnapshotActive);
+        Assert.Equal(VssSnapshotState.Active, vssManager.State);
     }
 
-    [Test]
-    [Explicit("Requires elevation and actual VSS capability")]
-    public async Task VssSnapshotManager_CreatePathResolver_WorksCorrectly()
+    [ElevatedVssFact]
+    public async Task CreatePathResolver_WorksCorrectly()
     {
-        // This test should only be run manually when elevated
-        if (!ElevationHelper.IsElevated())
-        {
-            Assert.Ignore("This test requires elevation to run.");
-        }
-
-        var volumeRoot = Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\";
-        
-        using var vssManager = new VssSnapshotManager(volumeRoot);
+        using var vssManager = new VssSnapshotManager(VolumeRoot);
         await vssManager.CreateSnapshotAsync();
-        
-        // Act
+
         var pathResolver = vssManager.CreatePathResolver();
-        
-        // Assert
-        Assert.That(pathResolver, Is.Not.Null);
-        Assert.That(pathResolver.SnapshotPath, Is.Not.Null.And.Not.Empty);
-        Assert.That(pathResolver.OriginalVolumeRoot, Is.EqualTo(volumeRoot));
+
+        Assert.False(string.IsNullOrEmpty(pathResolver.SnapshotPath));
+        Assert.Equal(VolumeRoot, pathResolver.OriginalVolumeRoot);
     }
 
-    [Test]
-    [Explicit("Requires elevation and actual VSS capability")]
-    public async Task VssSnapshotManager_CanAccessFilesThroughSnapshot()
+    [ElevatedVssFact]
+    public async Task CanAccessFilesThroughSnapshot()
     {
-        // This test should only be run manually when elevated
-        if (!ElevationHelper.IsElevated())
-        {
-            Assert.Ignore("This test requires elevation to run.");
-        }
-
-        var volumeRoot = Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\";
         var testFile = Path.Combine(Environment.SystemDirectory, "notepad.exe");
-        
-        // Skip test if the file doesn't exist
         if (!File.Exists(testFile))
-        {
-            Assert.Ignore($"Test file {testFile} not found.");
-        }
-        
-        using var vssManager = new VssSnapshotManager(volumeRoot);
+            return; // nothing to compare against on this machine
+
+        using var vssManager = new VssSnapshotManager(VolumeRoot);
         await vssManager.CreateSnapshotAsync();
-        var pathResolver = vssManager.CreatePathResolver();
-        
-        // Act
-        var snapshotPath = pathResolver.ResolvePath(testFile);
-        
-        // Assert
-        Assert.That(File.Exists(snapshotPath), Is.True, "File should be accessible through VSS snapshot");
-        
-        // Verify file contents are the same
-        var originalSize = new FileInfo(testFile).Length;
-        var snapshotSize = new FileInfo(snapshotPath).Length;
-        Assert.That(snapshotSize, Is.EqualTo(originalSize), "File sizes should match");
+        var snapshotPath = vssManager.CreatePathResolver().ResolvePath(testFile);
+
+        Assert.True(File.Exists(snapshotPath), "File should be accessible through VSS snapshot");
+        Assert.Equal(new FileInfo(testFile).Length, new FileInfo(snapshotPath).Length);
     }
 
-    [Test]
-    public void VssSnapshotManager_CreateWithoutElevation_ThrowsException()
+    [ElevatedVssFact]
+    public async Task Dispose_AfterCreate_MovesToDisposed()
     {
-        // This test verifies that VSS operations fail gracefully without elevation
-        if (ElevationHelper.IsElevated())
-        {
-            Assert.Ignore("This test should only run without elevation.");
-        }
-
-        var volumeRoot = Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\";
-        
-        using var vssManager = new VssSnapshotManager(volumeRoot);
-        
-        // Act & Assert
-        Assert.ThrowsAsync<VssSnapshotException>(async () =>
+        VssSnapshotManager vssManager;
+        using (vssManager = new VssSnapshotManager(VolumeRoot))
         {
             await vssManager.CreateSnapshotAsync();
-        });
-    }
-
-    [Test]
-    [Explicit("Requires elevation and actual VSS capability")]
-    public async Task VssSnapshotManager_Dispose_CleansUpSnapshot()
-    {
-        // This test should only be run manually when elevated
-        if (!ElevationHelper.IsElevated())
-        {
-            Assert.Ignore("This test requires elevation to run.");
+            Assert.True(vssManager.IsSnapshotActive);
         }
 
-        var volumeRoot = Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\";
-        string? snapshotPath = null;
-        
-        // Act
-        using (var vssManager = new VssSnapshotManager(volumeRoot))
-        {
-            snapshotPath = await vssManager.CreateSnapshotAsync();
-            Assert.That(vssManager.IsSnapshotActive, Is.True);
-        } // Dispose called here
-        
-        // Assert - After disposal, snapshot should be cleaned up
-        // Note: We can't easily verify the snapshot is gone without VSS APIs,
-        // but we can at least verify the operation completed without throwing
-        Assert.That(snapshotPath, Is.Not.Null);
+        Assert.Equal(VssSnapshotState.Disposed, vssManager.State);
+        Assert.False(vssManager.IsSnapshotActive);
     }
 
-    [Test]
-    [Explicit("Requires elevation and actual VSS capability")]
-    public async Task VssSnapshotManager_MultipleCreateCalls_ThrowsException()
+    [ElevatedVssFact]
+    public async Task MultipleCreateCalls_ThrowsInvalidOperation()
     {
-        // This test should only be run manually when elevated
-        if (!ElevationHelper.IsElevated())
-        {
-            Assert.Ignore("This test requires elevation to run.");
-        }
-
-        var volumeRoot = Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\";
-        
-        using var vssManager = new VssSnapshotManager(volumeRoot);
+        using var vssManager = new VssSnapshotManager(VolumeRoot);
         await vssManager.CreateSnapshotAsync();
-        
-        // Act & Assert
-        Assert.ThrowsAsync<InvalidOperationException>(async () =>
-        {
-            await vssManager.CreateSnapshotAsync();
-        });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => vssManager.CreateSnapshotAsync());
+        Assert.Equal(VssSnapshotState.Active, vssManager.State); // a rejected call must not disturb the snapshot
     }
 
-    [Test]
-    public async Task VssSnapshotManager_CreateSnapshotAsync_RespectsTimeout()
+    // ---- State machine behaviour (no real snapshot required) -------------------------
+
+    [NonElevatedWindowsFact]
+    public async Task CreateWithoutElevation_ThrowsVssSnapshotException_AndReturnsToNew()
     {
-        var volumeRoot = Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\";
-        var shortTimeout = TimeSpan.FromMilliseconds(1); // Very short timeout
-        
-        using var vssManager = new VssSnapshotManager(volumeRoot, shortTimeout);
-        
-        // Act & Assert
-        var ex = await Assert.ThrowsAsync<VssSnapshotException>(async () =>
-        {
-            await vssManager.CreateSnapshotAsync();
-        });
-        
-        Assert.That(ex.Message, Does.Contain("timed out"));
+        using var vssManager = new VssSnapshotManager(VolumeRoot);
+
+        await Assert.ThrowsAsync<VssSnapshotException>(() => vssManager.CreateSnapshotAsync());
+
+        Assert.Equal(VssSnapshotState.New, vssManager.State);
     }
 
-    [Test]
-    public void VssSnapshotManager_CreatePathResolver_WithoutSnapshot_ThrowsException()
+    [Fact]
+    public void NewManager_IsInNewState_AndNotActive()
     {
-        var volumeRoot = Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\";
-        
-        using var vssManager = new VssSnapshotManager(volumeRoot);
-        
-        // Act & Assert
-        Assert.Throws<InvalidOperationException>(() =>
-        {
-            vssManager.CreatePathResolver();
-        });
+        using var vssManager = new VssSnapshotManager(VolumeRoot);
+
+        Assert.Equal(VssSnapshotState.New, vssManager.State);
+        Assert.False(vssManager.IsSnapshotActive);
+        Assert.Null(vssManager.SnapshotDeviceObject);
+    }
+
+    [Fact]
+    public async Task CreateSnapshotAsync_ZeroTimeout_ThrowsTimedOut_AndReturnsToNew()
+    {
+        // A zero timeout cancels the token before work starts, so this is deterministic
+        // and never reaches the real VSS service.
+        using var vssManager = new VssSnapshotManager(VolumeRoot, TimeSpan.Zero);
+
+        var ex = await Assert.ThrowsAsync<VssSnapshotException>(() => vssManager.CreateSnapshotAsync());
+
+        Assert.Contains("timed out", ex.Message);
+        Assert.Equal(VssSnapshotState.New, vssManager.State);
+    }
+
+    [Fact]
+    public async Task CreateSnapshotAsync_CallerCancels_ThrowsOperationCanceled_AndReturnsToNew()
+    {
+        using var vssManager = new VssSnapshotManager(VolumeRoot);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vssManager.CreateSnapshotAsync(cts.Token));
+
+        Assert.Equal(VssSnapshotState.New, vssManager.State);
+    }
+
+    [Fact]
+    public async Task CreateSnapshotAsync_AfterDispose_ThrowsObjectDisposed()
+    {
+        var vssManager = new VssSnapshotManager(VolumeRoot);
+        vssManager.Dispose();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => vssManager.CreateSnapshotAsync());
+        Assert.Equal(VssSnapshotState.Disposed, vssManager.State);
+    }
+
+    [Fact]
+    public void Dispose_IsIdempotent()
+    {
+        var vssManager = new VssSnapshotManager(VolumeRoot);
+
+        vssManager.Dispose();
+        var ex = Record.Exception(() => vssManager.Dispose());
+
+        Assert.Null(ex);
+        Assert.Equal(VssSnapshotState.Disposed, vssManager.State);
+    }
+
+    [Fact]
+    public void CreatePathResolver_WithoutSnapshot_ThrowsInvalidOperation()
+    {
+        using var vssManager = new VssSnapshotManager(VolumeRoot);
+
+        Assert.Throws<InvalidOperationException>(() => vssManager.CreatePathResolver());
+    }
+
+    [Fact]
+    public void Constructor_AppendsTrailingBackslash()
+    {
+        using var vssManager = new VssSnapshotManager("C:");
+
+        Assert.Equal(@"C:\", vssManager.VolumeToSnapshot);
     }
 }
