@@ -20,28 +20,23 @@ public class Program
 
     // If VSS mode is requested and we're not elevated, try to restart with elevation
     if (vssRequested && !ElevationHelper.IsElevated())
-    {
       AnsiConsole.MarkupLine("[yellow]VSS mode requires administrator privileges. Requesting elevation...[/]");
-      
-      try
-      {
-        bool restarted = await ElevationHelper.RestartElevatedAsync(args);
-        if (restarted)
-        {
-          AnsiConsole.MarkupLine("[green]Restarting with elevated privileges...[/]");
-          Environment.Exit(0); // Exit the original process
-        }
-        else
-        {
-          AnsiConsole.MarkupLine("[red]Elevation was declined. VSS mode cannot be used without administrator privileges.[/]");
-          Environment.Exit((int)VssErrorCode.ElevationRequired);
-        }
-      }
-      catch (Exception ex)
-      {
-        AnsiConsole.MarkupLine($"[red]Failed to restart with elevation: {ex.Message}[/]");
+
+    var elevation = await ElevationHelper.EnsureElevatedAsync(args, vssRequested);
+    switch (elevation.Outcome)
+    {
+      case ElevationOutcome.Relaunched:
+        AnsiConsole.MarkupLine("[green]Restarting with elevated privileges...[/]");
+        Environment.Exit(0); // Exit the original process
+        return;
+      case ElevationOutcome.Declined:
+        AnsiConsole.MarkupLine("[red]Elevation was declined. VSS mode cannot be used without administrator privileges.[/]");
         Environment.Exit((int)VssErrorCode.ElevationRequired);
-      }
+        return;
+      case ElevationOutcome.Failed:
+        AnsiConsole.MarkupLine($"[red]Failed to restart with elevation: {Markup.Escape(elevation.Error!.Message)}[/]");
+        Environment.Exit((int)VssErrorCode.ElevationRequired);
+        return;
     }
 
     var app = ConsoleApp.Create();
@@ -207,6 +202,10 @@ public class Program
           vssResolver = vssManager.CreatePathResolver();
           AnsiConsole.MarkupLine($"[green]VSS snapshot created successfully.[/]");
         }
+        catch (OperationCanceledException)
+        {
+          throw; // user cancellation is handled by the command, not reported as a VSS failure
+        }
         catch (VssSnapshotException ex)
         {
           AnsiConsole.MarkupLine($"[red]VSS Error: {ex.Message}[/]");
@@ -274,6 +273,7 @@ public class Program
         .StartAsync(async ctx => {
           var mainTask = ctx.AddTask($"[green]Verifying files ({totalBytes.Bytes().Humanize()})[/]", maxValue: totalFiles);
           var verificationService = new VerificationService();
+          long filesCompleted = 0;
           
           // Set VSS resolver if available
           if (vssResolver != null)
@@ -292,7 +292,7 @@ public class Program
             }
           };
           verificationService.FileCompleted += (sender, e) => {
-            mainTask.Value++;
+            mainTask.Value = Interlocked.Increment(ref filesCompleted);
             if (e.Bag is ProgressTask fileTask) {
               fileTask.Value = fileTask.MaxValue;
             }
@@ -368,6 +368,10 @@ public class Program
           
           vssResolver = vssManager.CreatePathResolver();
           AnsiConsole.MarkupLine($"[green]VSS snapshot created successfully.[/]");
+        }
+        catch (OperationCanceledException)
+        {
+          throw; // user cancellation is handled by the command, not reported as a VSS failure
         }
         catch (VssSnapshotException ex)
         {
@@ -452,11 +456,10 @@ public class Program
             if (e.Bag is ProgressTask fileTask) {
               fileTask.Value = e.BytesRead;
             }
-            Interlocked.Add(ref totalBytesRead, e.BytesJustRead);
-            mainTask.Value = totalBytesRead;
+            mainTask.Value = Interlocked.Add(ref totalBytesRead, e.BytesJustRead);
           };
           manifestService.FileCompleted += (sender, e) => {
-            filesProcessed++;
+            Interlocked.Increment(ref filesProcessed);
             if (e.Bag is ProgressTask fileTask) {
               fileTask.Value = fileTask.MaxValue;
             }

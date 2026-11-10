@@ -2,212 +2,117 @@ using Verity.Utilities;
 
 namespace Verity.Tests;
 
-[TestFixture]
 public class VssPathResolverTests
 {
     private const string TestSnapshotPath = @"\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy1";
     private const string TestVolumeRoot = @"C:\";
 
-    [Test]
+    private static VssPathResolver NewResolver() => new(TestSnapshotPath, TestVolumeRoot);
+
+    [Fact]
     public void Constructor_ValidParameters_SetsPropertiesCorrectly()
     {
-        // Arrange & Act
-        var resolver = new VssPathResolver(TestSnapshotPath, TestVolumeRoot);
+        var resolver = NewResolver();
 
-        // Assert
-        Assert.That(resolver.SnapshotPath, Is.EqualTo(TestSnapshotPath));
-        Assert.That(resolver.OriginalVolumeRoot, Is.EqualTo(TestVolumeRoot));
+        Assert.Equal(TestSnapshotPath, resolver.SnapshotPath);
+        Assert.Equal(TestVolumeRoot, resolver.OriginalVolumeRoot);
     }
 
-    [Test]
+    [Fact]
     public void Constructor_VolumeRootWithoutBackslash_AddsBackslash()
     {
-        // Arrange & Act
         var resolver = new VssPathResolver(TestSnapshotPath, "C:");
 
-        // Assert
-        Assert.That(resolver.OriginalVolumeRoot, Is.EqualTo(@"C:\"));
+        Assert.Equal(@"C:\", resolver.OriginalVolumeRoot);
     }
 
-    [Test]
-    public void Constructor_NullSnapshotPath_ThrowsArgumentNullException()
-    {
-        // Act & Assert
+    [Fact]
+    public void Constructor_NullSnapshotPath_ThrowsArgumentNullException() =>
         Assert.Throws<ArgumentNullException>(() => new VssPathResolver(null!, TestVolumeRoot));
-    }
 
-    [Test]
-    public void Constructor_NullVolumeRoot_ThrowsArgumentNullException()
-    {
-        // Act & Assert
+    [Fact]
+    public void Constructor_NullVolumeRoot_ThrowsArgumentNullException() =>
         Assert.Throws<ArgumentNullException>(() => new VssPathResolver(TestSnapshotPath, null!));
-    }
 
-    [Test]
+    [Fact]
     public void ResolvePath_PathOnSameVolume_MapsToSnapshotPath()
     {
-        // Arrange
-        var resolver = new VssPathResolver(TestSnapshotPath, TestVolumeRoot);
-        var originalPath = @"C:\Program Files\MyApp\app.exe";
-        var expectedPath = @"\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy1\Program Files\MyApp\app.exe";
+        var result = NewResolver().ResolvePath(@"C:\Program Files\MyApp\app.exe");
 
-        // Act
-        var result = resolver.ResolvePath(originalPath);
-
-        // Assert
-        Assert.That(result, Is.EqualTo(expectedPath));
+        Assert.Equal(@"\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy1\Program Files\MyApp\app.exe", result);
     }
 
-    [Test]
+    [Fact]
     public void ResolvePath_PathOnDifferentVolume_ReturnsOriginalPath()
     {
-        // Arrange
-        var resolver = new VssPathResolver(TestSnapshotPath, TestVolumeRoot);
         var originalPath = @"D:\SomeFolder\file.txt";
 
-        // Act
-        var result = resolver.ResolvePath(originalPath);
+        var result = NewResolver().ResolvePath(originalPath);
 
-        // Assert
-        Assert.That(result, Is.EqualTo(Path.GetFullPath(originalPath)));
+        Assert.Equal(Path.GetFullPath(originalPath), result);
     }
 
-    [Test]
+    [Fact]
     public void ResolvePath_RelativePath_ResolvesToSnapshotPath()
     {
-        // Arrange
-        var resolver = new VssPathResolver(TestSnapshotPath, TestVolumeRoot);
-        var relativePath = "temp\\file.txt";
-        
-        // Act
-        var result = resolver.ResolvePath(relativePath);
+        // Relative paths resolve against the current directory; only meaningful when that
+        // directory is on the snapshotted volume.
+        var cwdRoot = Path.GetPathRoot(Directory.GetCurrentDirectory());
+        var resolver = new VssPathResolver(TestSnapshotPath, cwdRoot!);
 
-        // Assert
-        Assert.That(result, Does.StartWith(TestSnapshotPath));
-        Assert.That(result, Does.EndWith("temp\\file.txt"));
+        var result = resolver.ResolvePath("temp\\file.txt");
+
+        Assert.StartsWith(TestSnapshotPath, result);
+        Assert.EndsWith("temp\\file.txt", result);
     }
 
-    [Test]
-    public void ResolvePath_EmptyPath_ThrowsArgumentNullException()
-    {
-        // Arrange
-        var resolver = new VssPathResolver(TestSnapshotPath, TestVolumeRoot);
+    [Fact]
+    public void ResolvePath_EmptyPath_ThrowsArgumentNullException() =>
+        Assert.Throws<ArgumentNullException>(() => NewResolver().ResolvePath(string.Empty));
 
-        // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => resolver.ResolvePath(string.Empty));
-    }
+    [Fact]
+    public void ResolvePath_NullPath_ThrowsArgumentNullException() =>
+        Assert.Throws<ArgumentNullException>(() => NewResolver().ResolvePath(null!));
 
-    [Test]
-    public void ResolvePath_NullPath_ThrowsArgumentNullException()
-    {
-        // Arrange
-        var resolver = new VssPathResolver(TestSnapshotPath, TestVolumeRoot);
-
-        // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => resolver.ResolvePath(null!));
-    }
-
-    [Test]
+    [Fact]
     public void ResolveDirectoryInfo_ValidDirectory_ReturnsSnapshotDirectoryInfo()
     {
-        // Arrange
-        var resolver = new VssPathResolver(TestSnapshotPath, TestVolumeRoot);
-        var originalDir = new DirectoryInfo(@"C:\Windows\System32");
+        var result = NewResolver().ResolveDirectoryInfo(new DirectoryInfo(@"C:\Windows\System32"));
 
-        // Act
-        var result = resolver.ResolveDirectoryInfo(originalDir);
-
-        // Assert
-        Assert.That(result.FullName, Does.StartWith(TestSnapshotPath));
-        Assert.That(result.FullName, Does.EndWith("Windows\\System32"));
+        Assert.StartsWith(TestSnapshotPath, result.FullName);
+        Assert.EndsWith("Windows\\System32", result.FullName);
     }
 
-    [Test]
-    public void ResolveDirectoryInfo_NullDirectory_ThrowsArgumentNullException()
-    {
-        // Arrange
-        var resolver = new VssPathResolver(TestSnapshotPath, TestVolumeRoot);
+    [Fact]
+    public void ResolveDirectoryInfo_NullDirectory_ThrowsArgumentNullException() =>
+        Assert.Throws<ArgumentNullException>(() => NewResolver().ResolveDirectoryInfo(null!));
 
-        // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => resolver.ResolveDirectoryInfo(null!));
-    }
-
-    [Test]
+    [Fact]
     public void ResolveFileInfo_ValidFile_ReturnsSnapshotFileInfo()
     {
-        // Arrange
-        var resolver = new VssPathResolver(TestSnapshotPath, TestVolumeRoot);
-        var originalFile = new FileInfo(@"C:\Windows\notepad.exe");
+        var result = NewResolver().ResolveFileInfo(new FileInfo(@"C:\Windows\notepad.exe"));
 
-        // Act
-        var result = resolver.ResolveFileInfo(originalFile);
-
-        // Assert
-        Assert.That(result.FullName, Does.StartWith(TestSnapshotPath));
-        Assert.That(result.FullName, Does.EndWith("Windows\\notepad.exe"));
+        Assert.StartsWith(TestSnapshotPath, result.FullName);
+        Assert.EndsWith("Windows\\notepad.exe", result.FullName);
     }
 
-    [Test]
-    public void ResolveFileInfo_NullFile_ThrowsArgumentNullException()
-    {
-        // Arrange
-        var resolver = new VssPathResolver(TestSnapshotPath, TestVolumeRoot);
+    [Fact]
+    public void ResolveFileInfo_NullFile_ThrowsArgumentNullException() =>
+        Assert.Throws<ArgumentNullException>(() => NewResolver().ResolveFileInfo(null!));
 
-        // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => resolver.ResolveFileInfo(null!));
-    }
+    [Fact]
+    public void IsPathOnSnapshotVolume_PathOnSameVolume_ReturnsTrue() =>
+        Assert.True(NewResolver().IsPathOnSnapshotVolume(@"C:\Program Files\MyApp\app.exe"));
 
-    [Test]
-    public void IsPathOnSnapshotVolume_PathOnSameVolume_ReturnsTrue()
-    {
-        // Arrange
-        var resolver = new VssPathResolver(TestSnapshotPath, TestVolumeRoot);
-        var pathOnSameVolume = @"C:\Program Files\MyApp\app.exe";
+    [Fact]
+    public void IsPathOnSnapshotVolume_PathOnDifferentVolume_ReturnsFalse() =>
+        Assert.False(NewResolver().IsPathOnSnapshotVolume(@"D:\SomeFolder\file.txt"));
 
-        // Act
-        var result = resolver.IsPathOnSnapshotVolume(pathOnSameVolume);
+    [Fact]
+    public void IsPathOnSnapshotVolume_EmptyPath_ReturnsFalse() =>
+        Assert.False(NewResolver().IsPathOnSnapshotVolume(string.Empty));
 
-        // Assert
-        Assert.That(result, Is.True);
-    }
-
-    [Test]
-    public void IsPathOnSnapshotVolume_PathOnDifferentVolume_ReturnsFalse()
-    {
-        // Arrange
-        var resolver = new VssPathResolver(TestSnapshotPath, TestVolumeRoot);
-        var pathOnDifferentVolume = @"D:\SomeFolder\file.txt";
-
-        // Act
-        var result = resolver.IsPathOnSnapshotVolume(pathOnDifferentVolume);
-
-        // Assert
-        Assert.That(result, Is.False);
-    }
-
-    [Test]
-    public void IsPathOnSnapshotVolume_EmptyPath_ReturnsFalse()
-    {
-        // Arrange
-        var resolver = new VssPathResolver(TestSnapshotPath, TestVolumeRoot);
-
-        // Act
-        var result = resolver.IsPathOnSnapshotVolume(string.Empty);
-
-        // Assert
-        Assert.That(result, Is.False);
-    }
-
-    [Test]
-    public void IsPathOnSnapshotVolume_NullPath_ReturnsFalse()
-    {
-        // Arrange
-        var resolver = new VssPathResolver(TestSnapshotPath, TestVolumeRoot);
-
-        // Act
-        var result = resolver.IsPathOnSnapshotVolume(null!);
-
-        // Assert
-        Assert.That(result, Is.False);
-    }
+    [Fact]
+    public void IsPathOnSnapshotVolume_NullPath_ReturnsFalse() =>
+        Assert.False(NewResolver().IsPathOnSnapshotVolume(null!));
 }

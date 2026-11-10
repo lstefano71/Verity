@@ -59,8 +59,8 @@ public class VerificationService
     var allListedFiles = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
     long totalBytesRead = 0;
 
-    var problematicResults = new List<VerificationResult>();
-    // var unlistedFiles = new List<string>(); // REMOVE
+    // Written to concurrently by all consumers, hence the thread-safe collection.
+    var problematicResults = new ConcurrentBag<VerificationResult>();
 
     var producer = Task.Run(async () => {
       foreach (var entry in manifestEntries) {
@@ -121,13 +121,13 @@ public class VerificationService
                 }
 
                 Interlocked.Add(ref totalBytesRead, job.FileSize);
-                if (string.Equals(actualHash, job.Entry.ExpectedHash, StringComparison.OrdinalIgnoreCase)) {
-                  result = new(job.Entry, ResultStatus.Success, FullPath: fullPath);
-                } else if (new FileInfo(effectivePath).LastWriteTimeUtc > checksumFileTimestamp) {
-                  result = new(job.Entry, ResultStatus.Warning, actualHash, "Checksum mismatch (file is newer).", fullPath);
-                } else {
-                  result = new(job.Entry, ResultStatus.Error, actualHash, "Checksum mismatch.", fullPath);
-                }
+                var status = StatusClassifier.Classify(job.Entry.ExpectedHash, actualHash,
+                  new FileInfo(effectivePath).LastWriteTimeUtc, checksumFileTimestamp);
+                result = status switch {
+                  ResultStatus.Success => new(job.Entry, ResultStatus.Success, FullPath: fullPath),
+                  ResultStatus.Warning => new(job.Entry, ResultStatus.Warning, actualHash, "Checksum mismatch (file is newer).", fullPath),
+                  _ => new(job.Entry, ResultStatus.Error, actualHash, "Checksum mismatch.", fullPath)
+                };
               } catch (Exception ex) {
                 result = new(job.Entry, ResultStatus.Warning, Details: "Cannot read file",
                   FullPath: fullPath, Exception: ex);
@@ -165,7 +165,6 @@ public class VerificationService
       if (!manifestRelPaths.Contains(relFile) && !absFile.Equals(options.ChecksumFile.FullName, StringComparison.OrdinalIgnoreCase)) {
         warnings++;
         FileFoundNotInChecksumList?.Invoke(absFile);
-        // Instead of unlistedFiles.Add(absFile), add to problematicResults:
         var entry = new ChecksumEntry("", relFile);
         problematicResults.Add(new VerificationResult(
             entry,
@@ -185,11 +184,22 @@ public class VerificationService
         warnings,
         errors,
         totalBytesRead,
-        problematicResults
-    // REMOVE unlistedFiles
+        [.. problematicResults]
     );
   }
 }
+
+/// <summary>
+/// Single source of truth for turning a computed hash into a <see cref="ResultStatus"/>.
+/// <code>
+/// blank expected/actual hash ─────────────────────────────► Error
+/// hashes equal ───────────────────────────────────────────► Success
+/// hashes differ, file written after the manifest ─────────► Warning  (probably edited since)
+/// hashes differ otherwise ────────────────────────────────► Error
+/// </code>
+/// Cases decided before hashing are handled by <see cref="VerificationService"/>:
+/// file missing → Error, file unreadable → Warning, file not in manifest → Warning.
+/// </summary>
 public static class StatusClassifier
 {
   public static ResultStatus Classify(string? expectedHash, string? actualHash, DateTime fileWriteTime, DateTime manifestWriteTime)

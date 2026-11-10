@@ -2,179 +2,96 @@ using Verity.Utilities;
 
 namespace Verity.Tests;
 
-[TestFixture]
 public class ElevationHelperTests
 {
-    [Test]
-    public void IsElevated_ReturnsBoolean()
+    [Fact]
+    public void IsElevated_DoesNotThrow()
     {
-        // Act
-        var result = ElevationHelper.IsElevated();
-
-        // Assert
-        Assert.That(result, Is.TypeOf<bool>());
+        var ex = Record.Exception(() => ElevationHelper.IsElevated());
+        Assert.Null(ex);
     }
 
-    [Test]
-    public void RequiresElevation_VssTrue_ReturnsTrue()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void RequiresElevation_FollowsUseVss(bool useVss)
     {
-        // Arrange
-        var options = new CliOptions(
-            new FileInfo("test.sha256"),
-            null,
-            "SHA256",
-            UseVss: true
-        );
+        var options = new CliOptions(new FileInfo("test.sha256"), null, "SHA256", UseVss: useVss);
 
-        // Act
-        var result = ElevationHelper.RequiresElevation(options);
-
-        // Assert
-        Assert.That(result, Is.True);
+        Assert.Equal(useVss, ElevationHelper.RequiresElevation(options));
     }
 
-    [Test]
-    public void RequiresElevation_VssFalse_ReturnsFalse()
-    {
-        // Arrange
-        var options = new CliOptions(
-            new FileInfo("test.sha256"),
-            null,
-            "SHA256",
-            UseVss: false
-        );
-
-        // Act
-        var result = ElevationHelper.RequiresElevation(options);
-
-        // Assert
-        Assert.That(result, Is.False);
-    }
-
-    [Test]
-    [Platform("Win")]
-    public async Task RestartElevatedAsync_ValidArgs_DoesNotThrow()
-    {
-        // Arrange
-        var args = new[] { "verify", "test.sha256", "--vss" };
-
-        // Act & Assert
-        // Note: This test won't actually restart the process, but it should not throw
-        // unless there's a fundamental issue with the implementation
-        Assert.DoesNotThrowAsync(async () =>
-        {
-            try
-            {
-                await ElevationHelper.RestartElevatedAsync(args);
-            }
-            catch (InvalidOperationException)
-            {
-                // This is expected if Environment.ProcessPath is null in test environment
-            }
-        });
-    }
-
-    [Test]
-    [Platform("Win")]
-    public async Task RestartElevatedAsync_EmptyArgs_DoesNotThrow()
-    {
-        // Arrange
-        var args = Array.Empty<string>();
-
-        // Act & Assert
-        Assert.DoesNotThrowAsync(async () =>
-        {
-            try
-            {
-                await ElevationHelper.RestartElevatedAsync(args);
-            }
-            catch (InvalidOperationException)
-            {
-                // This is expected if Environment.ProcessPath is null in test environment
-            }
-        });
-    }
-
-    [Test]
-    [Platform("Win")]
-    public async Task RestartElevatedAsync_ArgsWithSpaces_DoesNotThrow()
-    {
-        // Arrange
-        var args = new[] { "verify", "test file.sha256", "--root", "C:\\Program Files" };
-
-        // Act & Assert
-        Assert.DoesNotThrowAsync(async () =>
-        {
-            try
-            {
-                await ElevationHelper.RestartElevatedAsync(args);
-            }
-            catch (InvalidOperationException)
-            {
-                // This is expected if Environment.ProcessPath is null in test environment
-            }
-        });
-    }
-
-    [Test]
-    [Platform("Win")]
-    public async Task RestartElevatedAsync_ArgsWithQuotes_DoesNotThrow()
-    {
-        // Arrange
-        var args = new[] { "verify", "\"test file.sha256\"", "--root", "\"C:\\Program Files\"" };
-
-        // Act & Assert
-        Assert.DoesNotThrowAsync(async () =>
-        {
-            try
-            {
-                await ElevationHelper.RestartElevatedAsync(args);
-            }
-            catch (InvalidOperationException)
-            {
-                // This is expected if Environment.ProcessPath is null in test environment
-            }
-        });
-    }
-
-    [Test]
-    [Platform("Win")]
+    [Fact]
     public async Task RestartElevatedAsync_NullArgs_ThrowsArgumentNullException()
     {
-        // Act & Assert
-        Assert.ThrowsAsync<ArgumentNullException>(async () =>
-        {
-            await ElevationHelper.RestartElevatedAsync(null!);
-        });
+        // Throws while building the start info, before any process is started.
+        await Assert.ThrowsAsync<ArgumentNullException>(() => ElevationHelper.RestartElevatedAsync(null!));
     }
 
-    // Test the internal argument escaping logic indirectly
-    [Test]
-    public void EscapeArgument_Equivalence_Test()
-    {
-        // Arrange
-        var testArgs = new[]
-        {
-            "simple",
-            "with space",
-            "with\"quote",
-            "with\ttab",
-            "",
-            "already\"escaped\"",
-            "complex \"argument\" with spaces"
-        };
+    // --- EnsureElevatedAsync: the full decision table, with probes injected so that
+    // --- no process is ever launched and no UAC prompt is shown.
 
-        // Act & Assert - Test that RestartElevatedAsync doesn't throw with various argument types
-        Assert.DoesNotThrowAsync(async () =>
-        {
-            try
-            {
-                await ElevationHelper.RestartElevatedAsync(testArgs);
-            }
-            catch (InvalidOperationException)
-            {
-                // Expected in test environment
-            }
-        });
+    private static Func<string[], Task<bool>> NeverRelaunch() =>
+        _ => throw new Xunit.Sdk.XunitException("relaunch must not be attempted");
+
+    [Fact]
+    public async Task EnsureElevated_NotRequired_ReturnsNotRequired_WithoutProbing()
+    {
+        var result = await ElevationHelper.EnsureElevatedAsync(
+            ["verify", "x"], elevationRequired: false,
+            isElevated: () => throw new Xunit.Sdk.XunitException("must not probe"),
+            relaunch: NeverRelaunch());
+
+        Assert.Equal(ElevationOutcome.NotRequired, result.Outcome);
+        Assert.True(result.CanProceed);
+    }
+
+    [Fact]
+    public async Task EnsureElevated_RequiredAndAlreadyElevated_ReturnsAlreadyElevated()
+    {
+        var result = await ElevationHelper.EnsureElevatedAsync(
+            [], elevationRequired: true, isElevated: () => true, relaunch: NeverRelaunch());
+
+        Assert.Equal(ElevationOutcome.AlreadyElevated, result.Outcome);
+        Assert.True(result.CanProceed);
+    }
+
+    [Fact]
+    public async Task EnsureElevated_RelaunchStarts_ReturnsRelaunched_AndForwardsArgs()
+    {
+        string[]? forwarded = null;
+        var args = new[] { "verify", "m.sha256", "--vss" };
+
+        var result = await ElevationHelper.EnsureElevatedAsync(
+            args, true, isElevated: () => false,
+            relaunch: a => { forwarded = a; return Task.FromResult(true); });
+
+        Assert.Equal(ElevationOutcome.Relaunched, result.Outcome);
+        Assert.False(result.CanProceed);
+        Assert.Same(args, forwarded);
+    }
+
+    [Fact]
+    public async Task EnsureElevated_UserDeclines_ReturnsDeclined()
+    {
+        var result = await ElevationHelper.EnsureElevatedAsync(
+            [], true, isElevated: () => false, relaunch: _ => Task.FromResult(false));
+
+        Assert.Equal(ElevationOutcome.Declined, result.Outcome);
+        Assert.False(result.CanProceed);
+        Assert.Null(result.Error);
+    }
+
+    [Fact]
+    public async Task EnsureElevated_RelaunchThrows_ReturnsFailed_WithError()
+    {
+        var boom = new InvalidOperationException("boom");
+
+        var result = await ElevationHelper.EnsureElevatedAsync(
+            [], true, isElevated: () => false, relaunch: _ => throw boom);
+
+        Assert.Equal(ElevationOutcome.Failed, result.Outcome);
+        Assert.False(result.CanProceed);
+        Assert.Same(boom, result.Error);
     }
 }
