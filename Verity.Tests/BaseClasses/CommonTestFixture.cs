@@ -56,19 +56,20 @@ public class CommonTestFixture : IAsyncLifetime, IDisposable
 
   public async Task<ProcessResult> RunVerity(string args)
   {
-    // Use the main Verity.exe from Verity\bin\Debug\net9.0
+    // Use the main Verity.exe built for the same target framework as this test assembly
     // Use the correct absolute path for Verity.exe
     // Use the workspace root to construct the path to Verity.exe
     // Dynamically search for Verity.exe in candidate locations
     // Go up to workspace root, then down into Verity/bin/... for Verity.exe
     var testBaseDir = AppContext.BaseDirectory;
-    // Go up four levels: net9.0 -> Debug -> bin -> Verity.Tests -> workspace root
+    var tfm = new DirectoryInfo(testBaseDir).Name; // e.g. net10.0 (BaseDirectory ends with a separator)
+    // Go up four levels: <tfm> -> <config> -> bin -> Verity.Tests -> workspace root
     var workspaceRoot = Path.GetFullPath(Path.Combine(testBaseDir, "..", "..", "..", ".."));
     var verityProjectDir = Path.Combine(workspaceRoot, "Verity");
     var candidatePaths = new[] {
-    Path.Combine(verityProjectDir, "bin", "Release", "net9.0", "publish", "Verity.exe"),
-    Path.Combine(verityProjectDir, "bin", "Release", "net9.0", "Verity.exe"),
-    Path.Combine(verityProjectDir, "bin", "Debug", "net9.0", "Verity.exe")
+    Path.Combine(verityProjectDir, "bin", "Release", tfm, "publish", "Verity.exe"),
+    Path.Combine(verityProjectDir, "bin", "Release", tfm, "Verity.exe"),
+    Path.Combine(verityProjectDir, "bin", "Debug", tfm, "Verity.exe")
   };
     string? exePath = candidatePaths
       .Where(File.Exists)
