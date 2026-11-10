@@ -16,7 +16,7 @@
 Verity is a high-performance file integrity verification tool designed for seamless integration into CI/CD pipelines. This document details how to leverage Verity's capabilities within automation platforms such as GitHub Actions, Azure Pipelines, and Jenkins. The tool's design emphasizes automation-friendly features including standardized exit codes, machine-readable output formats, and robust command-line interface for reliable pipeline orchestration.
 
 **Section sources**
-- [README.md](file://README.md#L1-L21)
+- [README.md](../../../../README.md)
 
 ## Exit Code Semantics for Pipeline Control
 
@@ -70,13 +70,13 @@ ExitCodeSuccess --> End
 
 
 **Diagram sources**
-- [Program.cs](file://Verity/Program.cs#L350-L360)
-- [VerificationService.cs](file://Verity/Services/VerificationService.cs#L181-L193)
+- [Program.cs](../../../../Verity/Program.cs)
+- [VerificationService.cs](../../../../Verity/Services/VerificationService.cs)
 
 **Section sources**
-- [Program.cs](file://Verity/Program.cs#L350-L360)
-- [Models.cs](file://Verity/Models.cs#L35-L40)
-- [README.md](file://README.md#L97-L133)
+- [Program.cs](../../../../Verity/Program.cs)
+- [Models.cs](../../../../Verity/Models.cs)
+- [README.md](../../../../README.md)
 
 ## Cake Build Integration Example
 
@@ -164,7 +164,7 @@ Task("Run-Tests")
 This integration pattern can be adapted for any CI/CD platform by translating the Cake syntax to the target platform's configuration format.
 
 **Section sources**
-- [build.cake](file://build.cake#L1-L209)
+- [build.cake](../../../../build.cake)
 
 ## Pipeline Configuration Examples
 
@@ -334,8 +334,8 @@ pipeline {
 
 
 **Section sources**
-- [build.cake](file://build.cake#L1-L209)
-- [README.md](file://README.md#L49-L96)
+- [build.cake](../../../../build.cake)
+- [README.md](../../../../README.md)
 
 ## Fail-Fast vs Continue-on-Warning Strategies
 
@@ -392,12 +392,12 @@ G --> J[Pipeline Failed]
 
 
 **Diagram sources**
-- [Program.cs](file://Verity/Program.cs#L350-L360)
-- [README.md](file://README.md#L97-L133)
+- [Program.cs](../../../../Verity/Program.cs)
+- [README.md](../../../../README.md)
 
 **Section sources**
-- [Program.cs](file://Verity/Program.cs#L350-L360)
-- [ResultsPresenter.cs](file://Verity/Utilities/ResultsPresenter.cs#L99-L130)
+- [Program.cs](../../../../Verity/Program.cs)
+- [ResultsPresenter.cs](../../../../Verity/Utilities/ResultsPresenter.cs)
 
 ## Secure Manifest Management
 
@@ -451,8 +451,8 @@ For public distribution, multiple manifests with different algorithms provide de
 Consumers can verify integrity using any of the provided manifests, reducing the risk associated with potential cryptographic weaknesses in any single algorithm.
 
 **Section sources**
-- [build.cake](file://build.cake#L1-L209)
-- [README.md](file://README.md#L49-L96)
+- [build.cake](../../../../build.cake)
+- [README.md](../../../../README.md)
 
 ## Pull Request Validation
 
@@ -527,16 +527,16 @@ exit 0
 This approach ensures that every change to binaries is accompanied by an updated integrity manifest, providing traceability and verification throughout the development process.
 
 **Section sources**
-- [build.cake](file://build.cake#L1-L209)
-- [Program.cs](file://Verity/Program.cs#L82-L106)
+- [build.cake](../../../../build.cake)
+- [Program.cs](../../../../Verity/Program.cs)
 
 ## Conclusion
 Verity provides a robust foundation for ensuring artifact integrity throughout CI/CD pipelines. Its automation-friendly design, with standardized exit codes and machine-readable output, enables reliable integration with common automation platforms. By leveraging the examples and strategies outlined in this document, teams can implement comprehensive integrity verification that enhances security and reliability across their software delivery lifecycle. The combination of fail-fast error handling, flexible warning management, and secure manifest practices ensures that Verity can be effectively deployed in environments ranging from development to production.
 
 **Referenced Files in This Document**   
-- [build.cake](file://build.cake)
-- [Program.cs](file://Verity/Program.cs)
-- [Models.cs](file://Verity/Models.cs)
-- [VerificationService.cs](file://Verity/Services/VerificationService.cs)
-- [ResultsPresenter.cs](file://Verity/Utilities/ResultsPresenter.cs)
-- [README.md](file://README.md)
+- [build.cake](../../../../build.cake)
+- [Program.cs](../../../../Verity/Program.cs)
+- [Models.cs](../../../../Verity/Models.cs)
+- [VerificationService.cs](../../../../Verity/Services/VerificationService.cs)
+- [ResultsPresenter.cs](../../../../Verity/Utilities/ResultsPresenter.cs)
+- [README.md](../../../../README.md)
