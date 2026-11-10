@@ -51,10 +51,10 @@ ProcessData --> End([Processing Complete])
 
 
 **Diagram sources**
-- [FileIOUtils.cs](file://Verity/Utilities/FileIOUtils.cs#L4-L11)
+- [FileIOUtils.cs](../../../../Verity/Utilities/FileIOUtils.cs)
 
 **Section sources**
-- [FileIOUtils.cs](file://Verity/Utilities/FileIOUtils.cs#L4-L11)
+- [FileIOUtils.cs](../../../../Verity/Utilities/FileIOUtils.cs)
 
 ## Integration with File Processing
 
@@ -112,13 +112,13 @@ VerificationService --> FileStream : "Creates with buffer"
 
 
 **Diagram sources**
-- [FileIOUtils.cs](file://Verity/Utilities/FileIOUtils.cs#L4-L11)
-- [ManifestCreationService.cs](file://Verity/Services/ManifestCreationService.cs#L69)
-- [VerificationService.cs](file://Verity/Services/VerificationService.cs#L93)
+- [FileIOUtils.cs](../../../../Verity/Utilities/FileIOUtils.cs)
+- [ManifestCreationService.cs](../../../../Verity/Services/ManifestCreationService.cs)
+- [VerificationService.cs](../../../../Verity/Services/VerificationService.cs)
 
 **Section sources**
-- [ManifestCreationService.cs](file://Verity/Services/ManifestCreationService.cs#L50-L90)
-- [VerificationService.cs](file://Verity/Services/VerificationService.cs#L80-L100)
+- [ManifestCreationService.cs](../../../../Verity/Services/ManifestCreationService.cs)
+- [VerificationService.cs](../../../../Verity/Services/VerificationService.cs)
 
 ## Memory Management and Performance
 
@@ -207,19 +207,19 @@ I --> J[End]
 
 
 **Diagram sources**
-- [FileIOUtils.cs](file://Verity/Utilities/FileIOUtils.cs#L4-L11)
-- [ManifestCreationService.cs](file://Verity/Services/ManifestCreationService.cs#L75-L87)
-- [VerificationService.cs](file://Verity/Services/VerificationService.cs#L97-L107)
+- [FileIOUtils.cs](../../../../Verity/Utilities/FileIOUtils.cs)
+- [ManifestCreationService.cs](../../../../Verity/Services/ManifestCreationService.cs)
+- [VerificationService.cs](../../../../Verity/Services/VerificationService.cs)
 
 **Section sources**
-- [ManifestCreationService.cs](file://Verity/Services/ManifestCreationService.cs#L70-L90)
-- [VerificationService.cs](file://Verity/Services/VerificationService.cs#L90-L110)
+- [ManifestCreationService.cs](../../../../Verity/Services/ManifestCreationService.cs)
+- [VerificationService.cs](../../../../Verity/Services/VerificationService.cs)
 
 ## Conclusion
 Verity's adaptive I/O buffering strategy effectively balances performance and resource efficiency across diverse file sizes and storage scenarios. By dynamically selecting buffer sizes based on file characteristics, the system optimizes throughput for large files while minimizing memory pressure for small files. The integration of buffer pooling, asynchronous operations, and parallel processing creates a robust solution for handling multi-gigabyte datasets efficiently. This approach ensures optimal performance on various storage media while maintaining predictable memory usage, making Verity suitable for both high-performance workstations and resource-constrained environments.
 
 **Referenced Files in This Document**   
-- [FileIOUtils.cs](file://Verity/Utilities/FileIOUtils.cs)
-- [ManifestCreationService.cs](file://Verity/Services/ManifestCreationService.cs)
-- [VerificationService.cs](file://Verity/Services/VerificationService.cs)
-- [README.md](file://README.md)
+- [FileIOUtils.cs](../../../../Verity/Utilities/FileIOUtils.cs)
+- [ManifestCreationService.cs](../../../../Verity/Services/ManifestCreationService.cs)
+- [VerificationService.cs](../../../../Verity/Services/VerificationService.cs)
+- [README.md](../../../../README.md)
