@@ -157,8 +157,11 @@ public class VerificationService
     }
 
     var manifestRelPaths = new HashSet<string>(manifestEntries.Select(e => e.RelativePath!), StringComparer.OrdinalIgnoreCase);
-    var allFilesInRoot = Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories);
-    var filteredFiles = GlobUtils.FilterFiles(allFilesInRoot, rootPath, options.IncludeGlobs, options.ExcludeGlobs);
+    // In VSS mode scan the snapshot, so "not in manifest" uses the same point-in-time view as
+    // the hashing; relative paths are identical and reported paths stay the original ones.
+    var scanRoot = VssResolver?.ResolveDirectoryPath(rootPath) ?? rootPath;
+    var allFilesInRoot = Directory.EnumerateFiles(scanRoot, "*", SearchOption.AllDirectories);
+    var filteredFiles = GlobUtils.FilterFiles(allFilesInRoot, scanRoot, options.IncludeGlobs, options.ExcludeGlobs);
     foreach (var relFile in filteredFiles) {
       var absFile = Path.Combine(rootPath, relFile);
       cancellationToken.ThrowIfCancellationRequested();

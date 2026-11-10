@@ -117,6 +117,16 @@ public class RunPipelineTests
     Assert.Null(run.VssManager);
   }
 
+  [Fact]
+  public void Stopwatch_IsNotRunning_UntilProcessStartsIt()
+  {
+    // All commands time only the Process phase, so setup/scan time is never counted.
+    var run = NewRun();
+
+    Assert.False(run.Stopwatch.IsRunning);
+    Assert.Equal(TimeSpan.Zero, run.Stopwatch.Elapsed);
+  }
+
   [Theory]
   [InlineData(0, 0, 0, ExitCodes.Success)]
   [InlineData(5, 2, 0, ExitCodes.Warnings)]
